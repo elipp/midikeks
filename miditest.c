@@ -34,6 +34,8 @@ void set_keyarray_state(const MIDIPacket *packet) {
 	if (command == MIDI_KEYDOWN) {
 		UInt8 keyindex = packet->data[1];
 		keys[keyindex].pressed = 1;
+		keys[keyindex].t = 0;
+		keys[keyindex].A = 1;
 	}
 	else if (command == MIDI_KEYUP) {
 		UInt8 keyindex = packet->data[1];

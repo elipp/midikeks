@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <math.h>
 #include <CoreAudio/CoreAudio.h>
 #include <AudioUnit/AudioUnit.h>
@@ -13,36 +14,124 @@ static const double eqtemp_factor = 1.0594630943592953;
 //static const double eqtemp_factor = 1.055;
 static const double twopi = 6.2831853071795865;
 
+static const double dt = 1.0/44100.0;
+
+static inline double waveform_sine(double freq, double t, double phi) {
+	return sin(freq * twopi * t + phi);
+}
+
+static inline double waveform_sine_limit(double freq, double t, double phi, double limit_abs) {
+	double d = sin(freq * twopi * t + phi);
+	if (d > limit_abs) {
+		d = limit_abs;
+	}
+	if (d < -limit_abs) {
+		d = -limit_abs;
+	}
+	return d;
+}
+
+
+static double waveform_triangle(double freq, double t, double phi) {
+	float p = (twopi*freq*t + phi)/twopi;
+	float phase = p - floor(p);
+	return phase < 0.5 ? (-4*phase + 1) : (4*phase - 3);
+}
+
+static short *waveform_precalculated;
+
+static short *precalculate_waveform() {
+	short* w = malloc(44100*sizeof(short));
+	
+	for (int i = 0; i < 44100; ++i) {
+		w[i] = waveform_triangle(1, i*dt, 0);
+	}
+
+	return w;
+}
+
+static short lerp_waveform(double freq, double t, double phi) {
+	double step = 44100.0/freq;
+	double s = twopi*t + phi;
+	
+	return 0;
+}
+
 float midikey_to_hz(int index) {
 	// key 21 maps to lowest A (27.5 Hz @ A=440Hz)
 	// key 108 maps to highest C
 
-	return 27.5 * pow(eqtemp_factor, index - 20);
+	return 27.5 * pow(eqtemp_factor, index - 21);
+}
+
+static short *dumpdata;
+static int dumpoffset = 0;
+static int dumping = 0;
+
+#define DUMPSAMPLES 96000
+
+static int start_dumping() {
+	if (dumping == 0) {
+		printf("starting dump!\n");
+		dumpdata = malloc(DUMPSAMPLES*sizeof(short));
+		dumping = 1;
+	}
+	return 0;
+}
+
+static int stop_dumping() {
+	if (dumping == 1) {
+		printf("stopping dump\n");
+		FILE *fp = fopen("dumpfile.dat", "wb");
+		fwrite(dumpdata, sizeof(short), DUMPSAMPLES, fp); 
+		fclose(fp);
+		free(dumpdata);
+		dumping = 2;
+	}
+
+	return 1;
+}
+
+static int append_to_dump(short *buffer, int num_samples) {
+	if (dumping != 1) return 0;
+	memcpy(&dumpdata[dumpoffset], buffer, num_samples*sizeof(short));
+	dumpoffset += num_samples;
+	return dumpoffset;
+}
+
+static int get_current_dumpoffset() {
+	return dumpoffset;
 }
 
 static OSStatus rcallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFlags, const AudioTimeStamp *inTimeStamp, UInt32 inBusNumber, UInt32 inNumberFrames, AudioBufferList *ioData) {
 	//printf("%f\n", inTimeStamp->mSampleTime);
-	static const double dt = 1.0/44100.0;
-	static double t = 0;
-
-	double t_beg = t;
 
 	AudioBuffer *b = &ioData->mBuffers[0];
 
-	UInt16 *samples = (UInt16*)b->mData;
+	short *samples = (short*)b->mData;
 	memset(samples, 0, b->mDataByteSize);
 
-	static const double A = 0.2 * 32768.0;
+	static const double A = 0.20 * 32768.0;
+	int num_keys = 0;
 
-	for (int m = 20; m < 108; ++m) {
-		if (keys[m].pressed) {
-			t = t_beg;
+	for (int m = 20; m < 109; ++m) {
+		struct MIDIkey_t *k = &keys[m];
+		if (k->A > 0) {
+//			start_dumping();
 			for (int i = 0; i < PREFERRED_FRAMESIZE; ++i) {
-				samples[i] += A * sin(midikey_to_hz(m) * twopi * t);
-				t += dt;
+				//double tv = 0.0003*sin(5*twopi*t);
+				samples[i] += A * k->A * waveform_sine_limit(midikey_to_hz(m), k->t, 0, 0.5);
+				k->t += dt;
 			}
+			if (!k->pressed) {
+				k->A -= 0.10;
+			}
+			++num_keys;
 		}
 	}
+
+//	if (get_current_dumpoffset() + PREFERRED_FRAMESIZE >= DUMPSAMPLES) stop_dumping();
+//	if (dumping == 1) append_to_dump(samples, PREFERRED_FRAMESIZE);
 
 	return noErr;
 }

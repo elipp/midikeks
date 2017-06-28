@@ -1,4 +1,4 @@
 #!/bin/bash
 
-clang -Wall -O2 -framework Foundation -framework CoreMIDI -framework AudioUnit miditest.c output.c -o miditest
+clang -Wall -g -framework Foundation -framework CoreMIDI -framework AudioUnit miditest.c output.c -o miditest
 
