@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <CoreMIDI/CoreMIDI.h>
-
+//#include <GameController/GCController.h>
 #include "midi.h"
 #include "output.h"
 
@@ -9,9 +9,11 @@ static void notifyproc(const MIDINotification *message, void *refCon) {
 }
 
 MIDIKEY_t keys[128];
+static int sustain_pedal_down = 0;
 
 #define MIDI_KEYUP 0x80
 #define MIDI_KEYDOWN 0x90
+#define MIDI_SUSTAINPEDAL 0xB0
 
 void printPacketInfo(const MIDIPacket* packet) {
 	double timeinsec = packet->timeStamp / (double)1e9;
@@ -29,17 +31,49 @@ void printPacketInfo(const MIDIPacket* packet) {
 	puts("");
 }
 
+static void print_currently_pressed_keys() {
+	for (int m = 20; m < 109; ++m) {
+		struct MIDIkey_t *k = &keys[m];
+		if (k->pressed == 1) {
+			printf("%d ", m);
+		}
+	}
+	printf("\n");
+}
+
 void set_keyarray_state(const MIDIPacket *packet) {
 	UInt8 command = packet->data[0];
-	if (command == MIDI_KEYDOWN) {
-		UInt8 keyindex = packet->data[1];
-		keys[keyindex].pressed = 1;
-		keys[keyindex].t = 0;
-		keys[keyindex].A = 1;
-	}
-	else if (command == MIDI_KEYUP) {
-		UInt8 keyindex = packet->data[1];
-		keys[keyindex].pressed = 0;
+	UInt8 keyindex = 0;
+	UInt8 param1 = 0;
+
+	switch (command) {
+		case MIDI_KEYDOWN:
+			keyindex = packet->data[1];
+			printf("keydown for %d\n", keyindex);
+			keys[keyindex].pressed = 1;
+			keys[keyindex].t = 0;
+			keys[keyindex].A = 1;
+			break;
+
+		case MIDI_KEYUP:
+			keyindex = packet->data[1];
+			printf("keyup for %d\n", keyindex);
+			keys[keyindex].pressed = 0;
+			break;
+
+		case MIDI_SUSTAINPEDAL:
+			keyindex = packet->data[1];
+			param1 = packet->data[2];
+			if (keyindex == 66) { // this is middle pedal (64 for sustain pedal)
+				if (param1 == 0x7F) {
+					print_currently_pressed_keys();
+				}
+			}
+			break;
+
+		default:
+			break;
+
 	}
 }
 
@@ -48,9 +82,9 @@ static void readproc(const MIDIPacketList *pktlist, void *readProcRefCon, void *
 	int i;
 	int count = pktlist->numPackets;
 	for (i=0; i<count; i++) {
-//		printPacketInfo(packet);
+		//printPacketInfo(packet);
 		set_keyarray_state(packet);
-		packet = MIDIPacketNext(packet);
+//		packet = MIDIPacketNext(packet);
 	}
 }
 
@@ -84,6 +118,11 @@ int main(int argc, char *args[]) {
 
 	printf("number of MIDI sources: %d\n", ndevices);
 
+	if (ndevices < 1) {
+		fprintf(stderr, "no MIDI input devices detected, exiting!\n");
+		return 0;
+	}
+	
 	for (int i = 0; i < ndevices; ++i) {
 		MIDIEndpointRef src = MIDIGetSource(i);
 		CFStringRef name;

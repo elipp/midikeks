@@ -20,8 +20,20 @@ static inline double waveform_sine(double freq, double t, double phi) {
 	return sin(freq * twopi * t + phi);
 }
 
+static double waveform_triangle(double freq, double t, double phi) {
+	float p = (twopi*freq*t + phi)/twopi;
+	float phase = p - floor(p);
+	return phase < 0.5 ? (-4*phase + 1) : (4*phase - 3);
+}
+
 static inline double waveform_sine_limit(double freq, double t, double phi, double limit_abs) {
-	double d = sin(freq * twopi * t + phi);
+	double h = (27.5/freq);
+	double h2 = 0.5*h;
+	double d = sin(freq * twopi * t + phi) + 
+		h * sin(2*freq*twopi*t + phi)
+		+h * sin(3*freq*twopi*t + phi)
+		+h2 * waveform_triangle(4*freq, t, phi);
+
 	if (d > limit_abs) {
 		d = limit_abs;
 	}
@@ -32,11 +44,7 @@ static inline double waveform_sine_limit(double freq, double t, double phi, doub
 }
 
 
-static double waveform_triangle(double freq, double t, double phi) {
-	float p = (twopi*freq*t + phi)/twopi;
-	float phase = p - floor(p);
-	return phase < 0.5 ? (-4*phase + 1) : (4*phase - 3);
-}
+
 
 static short *waveform_precalculated;
 
@@ -62,6 +70,27 @@ float midikey_to_hz(int index) {
 	// key 108 maps to highest C
 
 	return 27.5 * pow(eqtemp_factor, index - 21);
+}
+
+double frand(double fMin, double fMax) {
+	double f = (double)rand() / RAND_MAX;
+	return fMin + f * (fMax - fMin);
+}
+
+float midikey_to_hz_random(int index) {
+	static float hz[128];
+	static int initialized = 0;
+
+	if (!initialized) {
+		hz[0] = 27.5;
+		for (int i = 1; i < 128; ++i) {
+			hz[i] = hz[i-1] * frand(0.94, 1.12);
+		}
+		initialized = 1;
+	}
+
+	return hz[index];
+
 }
 
 static short *dumpdata;
@@ -116,15 +145,16 @@ static OSStatus rcallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFl
 
 	for (int m = 20; m < 109; ++m) {
 		struct MIDIkey_t *k = &keys[m];
-		if (k->A > 0) {
+		if (k->A > 0.05) {
 //			start_dumping();
 			for (int i = 0; i < PREFERRED_FRAMESIZE; ++i) {
 				//double tv = 0.0003*sin(5*twopi*t);
 				samples[i] += A * k->A * waveform_sine_limit(midikey_to_hz(m), k->t, 0, 0.5);
 				k->t += dt;
+				//k->t = (k->t > 1.0) ? k->t - 1 : k->t; // not sure why this wouldn't work O_O
 			}
 			if (!k->pressed) {
-				k->A -= 0.10;
+				k->A *= 0.95;
 			}
 			++num_keys;
 		}
