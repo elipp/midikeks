@@ -49,7 +49,6 @@ void set_keyarray_state(const MIDIPacket *packet) {
 	switch (command) {
 		case MIDI_KEYDOWN:
 			keyindex = packet->data[1];
-			printf("keydown for %d\n", keyindex);
 			keys[keyindex].pressed = 1;
 			keys[keyindex].t = 0;
 			keys[keyindex].A = 1;
@@ -57,7 +56,6 @@ void set_keyarray_state(const MIDIPacket *packet) {
 
 		case MIDI_KEYUP:
 			keyindex = packet->data[1];
-			printf("keyup for %d\n", keyindex);
 			keys[keyindex].pressed = 0;
 			break;
 
@@ -84,7 +82,7 @@ static void readproc(const MIDIPacketList *pktlist, void *readProcRefCon, void *
 	for (i=0; i<count; i++) {
 		//printPacketInfo(packet);
 		set_keyarray_state(packet);
-//		packet = MIDIPacketNext(packet);
+		packet = MIDIPacketNext(packet); // this is really necessary!! lol
 	}
 }
 

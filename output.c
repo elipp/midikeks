@@ -8,7 +8,7 @@
 
 //typedef OSStatus (*AURenderCallback)(void *inRefCon, AudioUnitRenderActionFlags *ioActionFlags, const AudioTimeStamp *inTimeStamp, UInt32 inBusNumber, UInt32 inNumberFrames, AudioBufferList *ioData);
 
-#define PREFERRED_FRAMESIZE 32
+#define PREFERRED_FRAMESIZE 64
 
 static const double eqtemp_factor = 1.0594630943592953;
 //static const double eqtemp_factor = 1.055;
@@ -150,6 +150,7 @@ static OSStatus rcallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFl
 			for (int i = 0; i < PREFERRED_FRAMESIZE; ++i) {
 				//double tv = 0.0003*sin(5*twopi*t);
 				samples[i] += A * k->A * waveform_sine_limit(midikey_to_hz(m), k->t, 0, 0.5);
+//				samples[i] += A * k->A * waveform_sine(midikey_to_hz(m), k->t, 0);
 				k->t += dt;
 				//k->t = (k->t > 1.0) ? k->t - 1 : k->t; // not sure why this wouldn't work O_O
 			}
