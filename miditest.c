@@ -49,13 +49,67 @@ static void set_eqtemp_hz() {
 	}
 }
 
+enum {	
+	I_UNISON = 0,
+	I_MINOR2,
+	I_MAJOR2,
+	I_MINOR3,
+	I_MAJOR3,
+	I_P4,
+	I_TRITONE,
+	I_P5,
+	I_MINOR6,
+	I_MAJOR6,
+	I_MINOR7,
+	I_MAJOR7
+};
+
+
+static inline int interval_to_imask(int interval) { 
+	if (interval == 0) return 0;
+
+	else return (1 << interval);
+}
+
+static int scan_for_interval_present(int interval, int startindex) {
+	for (int i = startindex; i < 128; ++i) {
+		int b = i - startindex;
+		if (keys[i].pressed) {
+			if (b % 12 == interval) return 1;
+		}
+
+	}
+	return 0;
+}
+
+static int get_interval_mask(int startindex) {
+	int mask = 0;
+	for (int i = startindex; i < 128; ++i) {
+		if (keys[i].pressed) {
+			int d = i - startindex;
+			mask |= (1 << (d % 12));
+		}
+	}
+	return mask;
+}
+
+static int get_lowest_pressed() {
+	for (int i = 0; i < 128; ++i) {
+		if (keys[i].pressed) { 
+			return i;
+		}
+	}
+
+	return -1;
+}
+
 static void adjust_intonation(bool use_eqtemp) {
 	static double justratios[] = {
 		1.0,
 		25.0/24.0,
 		9.0/8.0,
-		//6.0/5.0,
-		19.0/16.0,	
+		6.0/5.0,
+		//19.0/16.0,	
 		5.0/4.0,
 		4.0/3.0,
 		45.0/32.0,
@@ -66,16 +120,42 @@ static void adjust_intonation(bool use_eqtemp) {
 		15.0/8.0,
 	};
 
-	// assume lowest is tonic
-	int lowest = -1;
-	for (int i = 0; i < 128; ++i) {
-		if (keys[i].pressed) { 
-			lowest = i; 
-			keys[i].hz = midikey_to_hz(i);
-			break; 
+	int lowest = get_lowest_pressed();
+	int minor7_adjust = 0;
+	int p4_adjust = 0;
+	int minor3_adjust = 0;
+	if (lowest == -1) { return; }
+
+#define HAS_NOTE(interval) (imask & (interval_to_imask(interval)))
+
+	int imask = get_interval_mask(lowest);
+	if (HAS_NOTE(I_MINOR6)) {
+		if (HAS_NOTE(I_P4)) {
+			lowest -= I_P5;
+		}
+		else if (!HAS_NOTE(I_MAJOR3)) {
+			lowest -= I_MAJOR3;
 		}
 	}
-	if (lowest == -1) { return; }
+	else if (HAS_NOTE(I_P4) && HAS_NOTE(I_MAJOR6)) {
+		lowest -= I_P5;
+	}
+
+	else if (HAS_NOTE(I_MINOR3)) {
+		if (HAS_NOTE(I_MINOR7)) {
+			minor7_adjust = 1;
+			if (HAS_NOTE(I_P4)) { // minor11 sounds terrible with this p4
+				p4_adjust = 1;
+			}
+		}
+		else { 
+			minor3_adjust = 1;
+		}
+	}
+
+
+	double bf = midikey_to_hz(lowest);
+	keys[lowest].hz = bf;
 
 	for (int i = lowest + 1; i < 128; ++i) {
 		MIDIKEY_t *k = &keys[i];
@@ -87,7 +167,18 @@ static void adjust_intonation(bool use_eqtemp) {
 				k->hz = midikey_to_hz(i);
 			}
 			else {
-				k->hz = pow(2, times) * justratios[modulo] * keys[lowest].hz;
+				if (modulo == I_MINOR7 && minor7_adjust) {
+					k->hz = (1<<times) * bf * justratios[I_MINOR3] * justratios[I_P5];
+				}
+				else if (modulo == I_P4 && p4_adjust) {
+					k->hz = (1<<times) * bf * justratios[I_MINOR3]*justratios[I_MAJOR2];
+				}
+				else if (modulo == I_MINOR3 && minor3_adjust) {
+					k->hz = (1<<times) * bf * (19.0/16.0);
+				}
+				else {
+					k->hz = (1<<times) * bf * justratios[modulo];
+				}
 			}
 		}
 	}

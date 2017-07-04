@@ -143,7 +143,9 @@ static OSStatus rcallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFl
 	for (int m = 20; m < 109; ++m) {
 		struct MIDIkey_t *k = &keys[m];
 		if (k->A > 0.05) {
+#ifdef DUMP
 			start_dumping();
+#endif
 			for (int i = 0; i < PREFERRED_FRAMESIZE; ++i) {
 				//double tv = 0.0003*sin(5*twopi*t);
 				samples[i] += A * k->A * waveform_sine_limit(k->hz, k->t, 0, 0.5);
@@ -156,8 +158,10 @@ static OSStatus rcallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFl
 		}
 	}
 
+#ifdef DUMP
 	if (get_current_dumpoffset() + PREFERRED_FRAMESIZE >= DUMPSAMPLES) stop_dumping();
 	if (dumping == 1) append_to_dump(samples, PREFERRED_FRAMESIZE);
+#endif
 
 	return noErr;
 }
