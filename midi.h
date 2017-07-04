@@ -6,6 +6,7 @@ typedef struct MIDIkey_t {
 	int velocity;
 	double t;
 	double A;
+	double hz; 
 } MIDIKEY_t;
 
 extern MIDIKEY_t keys[];

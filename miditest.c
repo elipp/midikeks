@@ -41,6 +41,59 @@ static void print_currently_pressed_keys() {
 	printf("\n");
 }
 
+static double eqtemp_hz[128];
+
+static void set_eqtemp_hz() {
+	for (int i = 0; i < 128; ++i) {
+		eqtemp_hz[i] = midikey_to_hz(i);
+	}
+}
+
+static void adjust_intonation(bool use_eqtemp) {
+	static double justratios[] = {
+		1.0,
+		25.0/24.0,
+		9.0/8.0,
+		//6.0/5.0,
+		19.0/16.0,	
+		5.0/4.0,
+		4.0/3.0,
+		45.0/32.0,
+		3.0/2.0,
+		8.0/5.0,
+		5.0/3.0,
+		7.0/4.0,
+		15.0/8.0,
+	};
+
+	// assume lowest is tonic
+	int lowest = -1;
+	for (int i = 0; i < 128; ++i) {
+		if (keys[i].pressed) { 
+			lowest = i; 
+			keys[i].hz = midikey_to_hz(i);
+			break; 
+		}
+	}
+	if (lowest == -1) { return; }
+
+	for (int i = lowest + 1; i < 128; ++i) {
+		MIDIKEY_t *k = &keys[i];
+		if (k->pressed) {
+			int interval = (i - lowest);
+			int times = interval / 12;
+			int modulo = interval % 12;
+			if (use_eqtemp) {
+				k->hz = midikey_to_hz(i);
+			}
+			else {
+				k->hz = pow(2, times) * justratios[modulo] * keys[lowest].hz;
+			}
+		}
+	}
+
+}
+
 void set_keyarray_state(const MIDIPacket *packet) {
 	UInt8 command = packet->data[0];
 	UInt8 keyindex = 0;
@@ -67,6 +120,13 @@ void set_keyarray_state(const MIDIPacket *packet) {
 					print_currently_pressed_keys();
 				}
 			}
+			else if (keyindex == 64) {
+				if (param1 == 0x7F) {
+					sustain_pedal_down = 1;	
+				}
+
+				else sustain_pedal_down = 0;
+			}
 			break;
 
 		default:
@@ -84,6 +144,7 @@ static void readproc(const MIDIPacketList *pktlist, void *readProcRefCon, void *
 		set_keyarray_state(packet);
 		packet = MIDIPacketNext(packet); // this is really necessary!! lol
 	}
+	adjust_intonation(!sustain_pedal_down);
 }
 
 
@@ -120,6 +181,8 @@ int main(int argc, char *args[]) {
 		fprintf(stderr, "no MIDI input devices detected, exiting!\n");
 		return 0;
 	}
+
+	set_eqtemp_hz();
 	
 	for (int i = 0; i < ndevices; ++i) {
 		MIDIEndpointRef src = MIDIGetSource(i);

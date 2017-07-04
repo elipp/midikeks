@@ -8,7 +8,7 @@
 
 //typedef OSStatus (*AURenderCallback)(void *inRefCon, AudioUnitRenderActionFlags *ioActionFlags, const AudioTimeStamp *inTimeStamp, UInt32 inBusNumber, UInt32 inNumberFrames, AudioBufferList *ioData);
 
-#define PREFERRED_FRAMESIZE 64
+#define PREFERRED_FRAMESIZE 32
 
 static const double eqtemp_factor = 1.0594630943592953;
 //static const double eqtemp_factor = 1.055;
@@ -43,9 +43,6 @@ static inline double waveform_sine_limit(double freq, double t, double phi, doub
 	return d;
 }
 
-
-
-
 static short *waveform_precalculated;
 
 static short *precalculate_waveform() {
@@ -65,7 +62,7 @@ static short lerp_waveform(double freq, double t, double phi) {
 	return 0;
 }
 
-float midikey_to_hz(int index) {
+double midikey_to_hz(int index) {
 	// key 21 maps to lowest A (27.5 Hz @ A=440Hz)
 	// key 108 maps to highest C
 
@@ -97,7 +94,7 @@ static short *dumpdata;
 static int dumpoffset = 0;
 static int dumping = 0;
 
-#define DUMPSAMPLES 96000
+#define DUMPSAMPLES (44100 * 30)
 
 static int start_dumping() {
 	if (dumping == 0) {
@@ -146,13 +143,11 @@ static OSStatus rcallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFl
 	for (int m = 20; m < 109; ++m) {
 		struct MIDIkey_t *k = &keys[m];
 		if (k->A > 0.05) {
-//			start_dumping();
+			start_dumping();
 			for (int i = 0; i < PREFERRED_FRAMESIZE; ++i) {
 				//double tv = 0.0003*sin(5*twopi*t);
-				samples[i] += A * k->A * waveform_sine_limit(midikey_to_hz(m), k->t, 0, 0.5);
-//				samples[i] += A * k->A * waveform_sine(midikey_to_hz(m), k->t, 0);
+				samples[i] += A * k->A * waveform_sine_limit(k->hz, k->t, 0, 0.5);
 				k->t += dt;
-				//k->t = (k->t > 1.0) ? k->t - 1 : k->t; // not sure why this wouldn't work O_O
 			}
 			if (!k->pressed) {
 				k->A *= 0.95;
@@ -161,8 +156,8 @@ static OSStatus rcallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFl
 		}
 	}
 
-//	if (get_current_dumpoffset() + PREFERRED_FRAMESIZE >= DUMPSAMPLES) stop_dumping();
-//	if (dumping == 1) append_to_dump(samples, PREFERRED_FRAMESIZE);
+	if (get_current_dumpoffset() + PREFERRED_FRAMESIZE >= DUMPSAMPLES) stop_dumping();
+	if (dumping == 1) append_to_dump(samples, PREFERRED_FRAMESIZE);
 
 	return noErr;
 }
