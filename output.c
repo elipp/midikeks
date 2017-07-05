@@ -26,6 +26,17 @@ static double waveform_triangle(double freq, double t, double phi) {
 	return phase < 0.5 ? (-4*phase + 1) : (4*phase - 3);
 }
 
+static inline double limit(double d, double limit_abs) {
+	if (d > limit_abs) {
+		d = limit_abs;
+	}
+	if (d < -limit_abs) {
+		d = -limit_abs;
+	}
+
+	return d;
+}
+
 static inline double waveform_sine_limit(double freq, double t, double phi, double limit_abs) {
 	double h = (27.5/freq);
 	double h2 = 0.5*h;
@@ -34,32 +45,40 @@ static inline double waveform_sine_limit(double freq, double t, double phi, doub
 		+h * sin(3*freq*twopi*t + phi)
 		+h2 * waveform_triangle(4*freq, t, phi);
 
-	if (d > limit_abs) {
-		d = limit_abs;
-	}
-	if (d < -limit_abs) {
-		d = -limit_abs;
-	}
-	return d;
+	return limit(d, limit_abs);
 }
 
-static short *waveform_precalculated;
+static double *sine_precalculated;
 
-static short *precalculate_waveform() {
-	short* w = malloc(44100*sizeof(short));
+#define PRECALC_SINE_RESOLUTION 128000 // this is plenty. sound pretty ok with 1024 :D
+
+static double *precalculate_sinusoid() {
+	double* w = malloc(PRECALC_SINE_RESOLUTION*sizeof(double));
+	double dp = twopi / (double)PRECALC_SINE_RESOLUTION;
 	
-	for (int i = 0; i < 44100; ++i) {
-		w[i] = waveform_triangle(1, i*dt, 0);
+	for (int i = 0; i < PRECALC_SINE_RESOLUTION; ++i) {
+		w[i] = sin(dp*i);
 	}
 
 	return w;
 }
 
-static short lerp_waveform(double freq, double t, double phi) {
-	double step = 44100.0/freq;
-	double s = twopi*t + phi;
-	
-	return 0;
+static double pcsin(double s) {
+	double m = fmod(s, twopi)/twopi;
+	int index = m * (double)PRECALC_SINE_RESOLUTION; // will get 'floored', but doesn't matter probably
+
+	return sine_precalculated[index];
+}
+
+static double pcwaveform_sine_limit(double freq, double t, double phi, double limit_abs) {
+	double h = (27.5/freq);
+	double h2 = 0.5*h;
+	double d = pcsin(freq * twopi * t + phi) + 
+		h * pcsin(2*freq*twopi*t + phi)
+		+h * pcsin(3*freq*twopi*t + phi)
+		+h2 * waveform_triangle(4*freq, t, phi);
+	return limit(d, limit_abs);
+
 }
 
 double midikey_to_hz(int index) {
@@ -148,7 +167,8 @@ static OSStatus rcallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFl
 #endif
 			for (int i = 0; i < PREFERRED_FRAMESIZE; ++i) {
 				//double tv = 0.0003*sin(5*twopi*t);
-				samples[i] += A * k->A * waveform_sine_limit(k->hz, k->t, 0, 0.5);
+				//samples[i] += A * k->A * waveform_sine_limit(k->hz, k->t, 0, 0.5);
+				samples[i] += A * k->A * pcwaveform_sine_limit(k->hz, k->t, 0, 0.5);
 				k->t += dt;
 			}
 			if (!k->pressed) {
@@ -292,6 +312,8 @@ static void close_audio (void) {
 
 int init_output() {
 	if (!init()) return 0;
+
+	sine_precalculated = precalculate_sinusoid();
 
 	AURenderCallbackStruct cb;
 	memset(&cb, 0, sizeof(cb));

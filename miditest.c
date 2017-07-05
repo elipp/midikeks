@@ -71,17 +71,6 @@ static inline int interval_to_imask(int interval) {
 	else return (1 << interval);
 }
 
-static int scan_for_interval_present(int interval, int startindex) {
-	for (int i = startindex; i < 128; ++i) {
-		int b = i - startindex;
-		if (keys[i].pressed) {
-			if (b % 12 == interval) return 1;
-		}
-
-	}
-	return 0;
-}
-
 static int get_interval_mask(int startindex) {
 	int mask = 0;
 	for (int i = startindex; i < 128; ++i) {
