@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <fftw3.h>
 
 #include "WAV.h"
@@ -18,6 +19,7 @@ int do_fft(double *in) {
 	int rising = 0;
 	double prev_magn = 0;
 
+	struct
 	int *peaks = malloc(FFT_N*sizeof(int));
 	int num_peaks = 0;
 
@@ -39,8 +41,8 @@ int do_fft(double *in) {
 	}
 
 	for (int i = 0; i < num_peaks; ++i) {
-		double peakhz = i*(44100.0/(double)FFT_N);
-		printf("peak at %.5f Hz\n", 
+		double peakhz = peaks[i]*(44100.0/(double)FFT_N);
+		printf("peak at %.5f Hz\n", peakhz);
 	}
 
 	fftw_free(out);
