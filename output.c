@@ -12,16 +12,24 @@
 
 static const double eqtemp_factor = 1.0594630943592953;
 //static const double eqtemp_factor = 1.055;
-static const double twopi = 6.2831853071795865;
+const double TWOPI = 6.2831853071795865;
 
-static const double dt = 1.0/44100.0;
+static double eqtemp_hz[128];
+
+void init_eqtemp_hztable() {
+	for (int i = 21; i < 128; ++i) {
+		eqtemp_hz[i] = 27.5*pow(eqtemp_factor, (i-21));
+	}
+}
+
+static const double GLOBAL_DT = 1.0/44100.0;
 
 static inline double waveform_sine(double freq, double t, double phi) {
-	return sin(freq * twopi * t + phi);
+	return sin(freq * TWOPI * t + phi);
 }
 
 static double waveform_triangle(double freq, double t, double phi) {
-	float p = (twopi*freq*t + phi)/twopi;
+	float p = (TWOPI*freq*t + phi)/TWOPI;
 	float phase = p - floor(p);
 	return phase < 0.5 ? (-4*phase + 1) : (4*phase - 3);
 }
@@ -40,9 +48,9 @@ static inline double limit(double d, double limit_abs) {
 static inline double waveform_sine_limit(double freq, double t, double phi, double limit_abs) {
 	double h = (27.5/freq);
 	double h2 = 0.5*h;
-	double d = sin(freq * twopi * t + phi) + 
-		h * sin(2*freq*twopi*t + phi)
-		+h * sin(3*freq*twopi*t + phi)
+	double d = sin(freq * TWOPI * t + phi) + 
+		h * sin(2*freq*TWOPI*t + phi)
+		+h * sin(3*freq*TWOPI*t + phi)
 		+h2 * waveform_triangle(4*freq, t, phi);
 
 	return limit(d, limit_abs);
@@ -54,7 +62,7 @@ static double *sine_precalculated;
 
 static double *precalculate_sinusoid() {
 	double* w = malloc(PRECALC_SINE_RESOLUTION*sizeof(double));
-	double dp = twopi / (double)PRECALC_SINE_RESOLUTION;
+	double dp = TWOPI / (double)PRECALC_SINE_RESOLUTION;
 	
 	for (int i = 0; i < PRECALC_SINE_RESOLUTION; ++i) {
 		w[i] = sin(dp*i);
@@ -64,8 +72,8 @@ static double *precalculate_sinusoid() {
 }
 
 static double pcsin(double s) {
-	double m = fmod(s, twopi)/twopi;
-	int index = m * (double)PRECALC_SINE_RESOLUTION; // will get 'floored', but doesn't matter probably
+	double m = fmod(s, TWOPI)/TWOPI;
+	int index = m * (double)(PRECALC_SINE_RESOLUTION-1); // will get 'floored', but doesn't matter probably
 
 	return sine_precalculated[index];
 }
@@ -73,9 +81,9 @@ static double pcsin(double s) {
 static double pcwaveform_sine_limit(double freq, double t, double phi, double limit_abs) {
 	double h = (27.5/freq);
 	double h2 = 0.5*h;
-	double d = pcsin(freq * twopi * t + phi) + 
-		h * pcsin(2*freq*twopi*t + phi)
-		+h * pcsin(3*freq*twopi*t + phi)
+	double d = pcsin(freq * TWOPI * t + phi) + 
+		h * pcsin(2*freq*TWOPI*t + phi)
+		+h * pcsin(3*freq*TWOPI*t + phi)
 		+h2 * waveform_triangle(4*freq, t, phi);
 	return limit(d, limit_abs);
 
@@ -85,7 +93,7 @@ double midikey_to_hz(int index) {
 	// key 21 maps to lowest A (27.5 Hz @ A=440Hz)
 	// key 108 maps to highest C
 
-	return 27.5 * pow(eqtemp_factor, index - 21);
+	return eqtemp_hz[index];
 }
 
 double frand(double fMin, double fMax) {
@@ -161,18 +169,21 @@ static OSStatus rcallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFl
 
 	for (int m = 20; m < 109; ++m) {
 		struct MIDIkey_t *k = &keys[m];
-		if (k->A > 0.05) {
+		if (k->A > 0.001) {
 #ifdef DUMP
 			start_dumping();
 #endif
 			for (int i = 0; i < PREFERRED_FRAMESIZE; ++i) {
-				//double tv = 0.0003*sin(5*twopi*t);
+				//double tv = 0.0003*sin(5*TWOPI*t);
 				//samples[i] += A * k->A * waveform_sine_limit(k->hz, k->t, 0, 0.5);
 				samples[i] += A * k->A * pcwaveform_sine_limit(k->hz, k->t, 0, 0.5);
-				k->t += dt;
+				k->t += GLOBAL_DT;
 			}
+			
+			k->phase = k->hz * k->t * TWOPI + 0;
+
 			if (!k->pressed) {
-				k->A *= 0.95;
+				k->A *= 0.99;
 			}
 			++num_keys;
 		}

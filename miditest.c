@@ -41,13 +41,6 @@ static void print_currently_pressed_keys() {
 	printf("\n");
 }
 
-static double eqtemp_hz[128];
-
-static void set_eqtemp_hz() {
-	for (int i = 0; i < 128; ++i) {
-		eqtemp_hz[i] = midikey_to_hz(i);
-	}
-}
 
 enum {	
 	I_UNISON = 0,
@@ -142,13 +135,19 @@ static void adjust_intonation(bool use_eqtemp) {
 		}
 	}
 
+	MIDIKEY_t *lk = &keys[lowest];
+	double lkorig_hz = lk->hz;
+	lk->hz = midikey_to_hz(lowest);
 
-	double bf = midikey_to_hz(lowest);
-	keys[lowest].hz = bf;
+	if (lkorig_hz != 0) { 
+		double newt = (lkorig_hz * lk->t)/lk->hz;
+		lk->t = newt;
+	}
 
 	for (int i = lowest + 1; i < 128; ++i) {
 		MIDIKEY_t *k = &keys[i];
-		if (k->pressed) {
+		if (k->A > 0.001) {
+			double orig_hz = k->hz;
 			int interval = (i - lowest);
 			int times = interval / 12;
 			int modulo = interval % 12;
@@ -157,19 +156,26 @@ static void adjust_intonation(bool use_eqtemp) {
 			}
 			else {
 				if (modulo == I_MINOR7 && minor7_adjust) {
-					k->hz = (1<<times) * bf * justratios[I_MINOR3] * justratios[I_P5];
+					k->hz = (1<<times) * lk->hz * justratios[I_MINOR3] * justratios[I_P5];
 				}
 				else if (modulo == I_P4 && p4_adjust) {
-					k->hz = (1<<times) * bf * justratios[I_MINOR3]*justratios[I_MAJOR2];
+					k->hz = (1<<times) * lk->hz * justratios[I_MINOR3]*justratios[I_MAJOR2];
 				}
 				else if (modulo == I_MINOR3 && minor3_adjust) {
-					k->hz = (1<<times) * bf * (19.0/16.0);
+					k->hz = (1<<times) * lk->hz * (19.0/16.0);
 				}
 				else {
-					k->hz = (1<<times) * bf * justratios[modulo];
+					k->hz = (1<<times) * lk->hz * justratios[modulo];
 				}
 			}
+
+			// adjust phase so no clicking occurs
+			double newt = (orig_hz * k->t)/k->hz;
+			k->t = newt;
+
 		}
+		else { memset(k, 0, sizeof(*k)); }
+
 	}
 
 }
@@ -184,6 +190,7 @@ void set_keyarray_state(const MIDIPacket *packet) {
 			keyindex = packet->data[1];
 			keys[keyindex].pressed = 1;
 			keys[keyindex].t = 0;
+			keys[keyindex].phase = 0;
 			keys[keyindex].A = 1;
 			break;
 
@@ -262,7 +269,8 @@ int main(int argc, char *args[]) {
 		return 0;
 	}
 
-	set_eqtemp_hz();
+	init_eqtemp_hztable();
+	memset(keys, 0, sizeof(keys));
 	
 	for (int i = 0; i < ndevices; ++i) {
 		MIDIEndpointRef src = MIDIGetSource(i);
