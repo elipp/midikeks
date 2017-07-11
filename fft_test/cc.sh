@@ -1,3 +1,3 @@
 #!/bin/bash
 
-clang -g -Wall -lm -lfftw3 WAV.c fft.c -o fft
+clang -g -O2 -Wall -lm -lfftw3 WAV.c fft.c -o fft

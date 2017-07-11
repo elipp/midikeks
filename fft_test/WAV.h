@@ -19,5 +19,6 @@ typedef struct WAV_hdr_t {
 
 
 double *read_WAV(const char* filename);
+int write_WAV(const char* filename, short *samples, long num_samples);
 
 #endif

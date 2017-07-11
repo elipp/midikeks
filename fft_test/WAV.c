@@ -70,3 +70,40 @@ double *read_WAV(const char* filename) {
 
 	return b;
 }
+
+int write_WAV(const char* filename, short *samples, long num_samples) {
+
+	FILE *fp = fopen(filename, "wb");
+
+	if (!fp) {
+		printf("unable to open output file %s!\n", filename);
+		return 0;
+	}
+
+	WAV_hdr_t header;
+
+	long filesize = sizeof(WAV_hdr_t) + (num_samples*sizeof(short));
+	int byteps = 16/8; // bytes per second
+
+	header.ChunkID_BE = WAV_hdr_RIFF;
+	header.ChunkSize_LE = eswap_s32(filesize - 8);
+	header.Format_BE = WAV_hdr_WAVE;
+	header.Subchunk1ID_BE = WAV_hdr_fmt;
+	header.Subchunk1Size_LE = 16;
+	header.AudioFormat_LE = 1;
+	header.NumChannels_LE = 1;
+	header.SampleRate_LE = 44100;
+	header.BitsPerSample_LE = 16;
+	header.ByteRate_LE = header.SampleRate_LE * header.NumChannels_LE * byteps;
+	header.BlockAlign_LE = header.NumChannels_LE * byteps;
+	header.Subchunk2ID_BE = WAV_hdr_data;
+	header.Subchunk2Size_LE = num_samples * header.NumChannels_LE * byteps;
+
+	fwrite(&header, 1, sizeof(WAV_hdr_t), fp);
+
+	fwrite(samples, num_samples, sizeof(short), fp);
+
+	fclose(fp);
+
+	return 1;
+}
