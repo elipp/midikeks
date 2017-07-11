@@ -89,6 +89,22 @@ static double pcwaveform_sine_limit(double freq, double t, double phi, double li
 
 }
 
+static double pcwaveform_synthpiano(double freq, double t, double phi) {
+	double T = freq*TWOPI*t;
+	double d = pcsin(1*T + phi) +
+		   0.75*pcsin(2*T + phi) +
+		   0.20*pcsin(3*T + phi) +
+		   0.23*pcsin(4*T + phi) +
+		   0.02*pcsin(5*T + phi) +
+		   0.03*pcsin(6*T + phi) +
+		   0.003*pcsin(7*T + phi) +
+		   0.003*pcsin(8*T + phi) +
+		   0.006*pcsin(9*T + phi);
+
+	return d;
+
+}
+
 double midikey_to_hz(int index) {
 	// key 21 maps to lowest A (27.5 Hz @ A=440Hz)
 	// key 108 maps to highest C
@@ -176,14 +192,17 @@ static OSStatus rcallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFl
 			for (int i = 0; i < PREFERRED_FRAMESIZE; ++i) {
 				//double tv = 0.0003*sin(5*TWOPI*t);
 				//samples[i] += A * k->A * waveform_sine_limit(k->hz, k->t, 0, 0.5);
-				samples[i] += A * k->A * pcwaveform_sine_limit(k->hz, k->t, 0, 0.5);
+//				samples[i] += A * k->A * pcwaveform_sine_limit(k->hz, k->t, 0, 0.5);
+				samples[i] += 0.3 * A * k->A * pcwaveform_synthpiano(k->hz, k->t, 0);
 				k->t += GLOBAL_DT;
 			}
 			
 			k->phase = k->hz * k->t * TWOPI + 0;
 
-			if (!k->pressed) {
+			if (!k->pressed && !sustain_pedal_down) {
 				k->A *= 0.99;
+			} else {
+				k->A *= 0.9995;
 			}
 			++num_keys;
 		}

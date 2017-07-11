@@ -12,4 +12,6 @@ typedef struct MIDIkey_t {
 
 extern MIDIKEY_t keys[];
 
+extern int sustain_pedal_down;
+
 #endif

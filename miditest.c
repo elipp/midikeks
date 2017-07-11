@@ -9,11 +9,12 @@ static void notifyproc(const MIDINotification *message, void *refCon) {
 }
 
 MIDIKEY_t keys[128];
-static int sustain_pedal_down = 0;
+int sustain_pedal_down = 0;
+static int left_pedal_down = 0;
 
 #define MIDI_KEYUP 0x80
 #define MIDI_KEYDOWN 0x90
-#define MIDI_SUSTAINPEDAL 0xB0
+#define MIDI_PEDAL 0xB0
 
 void printPacketInfo(const MIDIPacket* packet) {
 	double timeinsec = packet->timeStamp / (double)1e9;
@@ -77,7 +78,7 @@ static int get_interval_mask(int startindex) {
 
 static int get_lowest_pressed() {
 	for (int i = 0; i < 128; ++i) {
-		if (keys[i].pressed) { 
+		if (keys[i].pressed) {
 			return i;
 		}
 	}
@@ -184,14 +185,16 @@ void set_keyarray_state(const MIDIPacket *packet) {
 	UInt8 command = packet->data[0];
 	UInt8 keyindex = 0;
 	UInt8 param1 = 0;
+	UInt8 velocity = 0;
 
 	switch (command) {
 		case MIDI_KEYDOWN:
 			keyindex = packet->data[1];
+			velocity = packet->data[2];
 			keys[keyindex].pressed = 1;
 			keys[keyindex].t = 0;
 			keys[keyindex].phase = 0;
-			keys[keyindex].A = 1;
+			keys[keyindex].A = (double)velocity/(double)0x7F;
 			break;
 
 		case MIDI_KEYUP:
@@ -199,20 +202,31 @@ void set_keyarray_state(const MIDIPacket *packet) {
 			keys[keyindex].pressed = 0;
 			break;
 
-		case MIDI_SUSTAINPEDAL:
+		case MIDI_PEDAL:
+
+#define PEDAL_UNACORDA 0x43
+#define PEDAL_MIDDLE 0x42
+#define PEDAL_SUSTAIN 0x40
 			keyindex = packet->data[1];
 			param1 = packet->data[2];
-			if (keyindex == 66) { // this is middle pedal (64 for sustain pedal)
+
+			if (keyindex == PEDAL_MIDDLE) {
 				if (param1 == 0x7F) {
 					print_currently_pressed_keys();
 				}
 			}
-			else if (keyindex == 64) {
+			else if (keyindex == PEDAL_SUSTAIN) {
 				if (param1 == 0x7F) {
 					sustain_pedal_down = 1;	
 				}
 
 				else sustain_pedal_down = 0;
+			}
+			else if (keyindex == PEDAL_UNACORDA) {
+				if (param1 == 0x7F) {
+					left_pedal_down = 1;
+				}
+				else left_pedal_down = 0;
 			}
 			break;
 
@@ -231,7 +245,7 @@ static void readproc(const MIDIPacketList *pktlist, void *readProcRefCon, void *
 		set_keyarray_state(packet);
 		packet = MIDIPacketNext(packet); // this is really necessary!! lol
 	}
-	adjust_intonation(!sustain_pedal_down);
+	adjust_intonation(!left_pedal_down);
 }
 
 

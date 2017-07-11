@@ -79,10 +79,13 @@ int do_fft(double *in, const char* output_filename) {
 	memset(output, 0x0, num_samples*sizeof(short));
 	static const double GLOBAL_DT = 1.0/44100.0;
 	for (int i = 1; i < FFT_N/2; ++i) {
-//		int pind = peaks[i];
-		int pind = i;
+		int pind = peaks[i];
+//		int pind = i;
 
 		double M = magn(out_r2c[pind]);
+		double Mu1 = magn(out_r2c[pind-1]);
+		double Mo1 = magn(out_r2c[pind+1]);
+		M = M + Mu1 + Mo1;
 
 		if (pind == 0) break;
 		M /= HM;
