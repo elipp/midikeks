@@ -3,8 +3,10 @@
 #include <math.h>
 #include <CoreAudio/CoreAudio.h>
 #include <AudioUnit/AudioUnit.h>
+#include <AudioToolbox/AudioToolbox.h>
 
 #include "midi.h"
+#include "input.h"
 
 //typedef OSStatus (*AURenderCallback)(void *inRefCon, AudioUnitRenderActionFlags *ioActionFlags, const AudioTimeStamp *inTimeStamp, UInt32 inBusNumber, UInt32 inNumberFrames, AudioBufferList *ioData);
 
@@ -19,7 +21,9 @@ static double eqtemp_hz[128];
 void init_eqtemp_hztable() {
 	for (int i = 21; i < 128; ++i) {
 		eqtemp_hz[i] = 27.5*pow(eqtemp_factor, (i-21));
+		keys[i].hz = eqtemp_hz[i];
 	}
+
 }
 
 static const double GLOBAL_DT = 1.0/44100.0;
@@ -58,7 +62,7 @@ static inline double waveform_sine_limit(double freq, double t, double phi, doub
 
 static double *sine_precalculated;
 
-#define PRECALC_SINE_RESOLUTION 128000 // this is plenty. sound pretty ok with 1024 :D
+#define PRECALC_SINE_RESOLUTION 128000 // this is plenty. sounds pretty ok with 1024 :D
 
 static double *precalculate_sinusoid() {
 	double* w = malloc(PRECALC_SINE_RESOLUTION*sizeof(double));
@@ -183,6 +187,8 @@ static OSStatus rcallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFl
 	static const double A = 0.20 * 32768.0;
 	int num_keys = 0;
 
+	float *input = get_input_data();
+
 	for (int m = 20; m < 109; ++m) {
 		struct MIDIkey_t *k = &keys[m];
 		if (k->A > 0.001) {
@@ -194,6 +200,7 @@ static OSStatus rcallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFl
 				//samples[i] += A * k->A * waveform_sine_limit(k->hz, k->t, 0, 0.5);
 //				samples[i] += A * k->A * pcwaveform_sine_limit(k->hz, k->t, 0, 0.5);
 				samples[i] += 0.3 * A * k->A * pcwaveform_synthpiano(k->hz, k->t, 0);
+	//			samples[i] += 0.3 * A * k->A * input[i];
 				k->t += GLOBAL_DT;
 			}
 			
@@ -242,6 +249,9 @@ static struct CoreAudioFormatDescription format_map[] = {
 
 static AudioComponent output_comp;
 static AudioComponentInstance output_instance;
+static AudioComponent input_comp;
+static AudioComponentInstance input_instance;
+
 
 static bool init (void) {
 
@@ -263,6 +273,7 @@ static bool init (void) {
 		fprintf (stderr, "Failed to open default audio device.\n");
 		return false;
 	}
+
 
 	return true;
 }

@@ -3,6 +3,7 @@
 //#include <GameController/GCController.h>
 #include "midi.h"
 #include "output.h"
+#include "input.h"
 
 static void notifyproc(const MIDINotification *message, void *refCon) {
 
@@ -87,7 +88,7 @@ static int get_lowest_pressed() {
 }
 
 static void adjust_intonation(bool use_eqtemp) {
-	static double justratios[] = {
+	static double just[] = {
 		1.0,
 		25.0/24.0,
 		9.0/8.0,
@@ -107,6 +108,8 @@ static void adjust_intonation(bool use_eqtemp) {
 	int minor7_adjust = 0;
 	int p4_adjust = 0;
 	int minor3_adjust = 0;
+	int major6_adjust = 0;
+
 	if (lowest == -1) { return; }
 
 #define HAS_NOTE(interval) (imask & (interval_to_imask(interval)))
@@ -134,7 +137,14 @@ static void adjust_intonation(bool use_eqtemp) {
 		else { 
 			minor3_adjust = 1;
 		}
+	} else if (HAS_NOTE(I_MAJOR3) && HAS_NOTE(I_MAJOR6)) {
+		major6_adjust = 1;
 	}
+	else if (HAS_NOTE(I_MAJOR2) && HAS_NOTE(I_TRITONE)) {
+		lowest -= I_MINOR7;
+	}
+
+	while (lowest < 21) lowest += 12;
 
 	MIDIKEY_t *lk = &keys[lowest];
 	double lkorig_hz = lk->hz;
@@ -157,16 +167,19 @@ static void adjust_intonation(bool use_eqtemp) {
 			}
 			else {
 				if (modulo == I_MINOR7 && minor7_adjust) {
-					k->hz = (1<<times) * lk->hz * justratios[I_MINOR3] * justratios[I_P5];
+					k->hz = (1<<times) * lk->hz * just[I_MINOR3] * just[I_P5];
 				}
 				else if (modulo == I_P4 && p4_adjust) {
-					k->hz = (1<<times) * lk->hz * justratios[I_MINOR3]*justratios[I_MAJOR2];
+					k->hz = (1<<times) * lk->hz * just[I_MINOR3]*just[I_MAJOR2];
 				}
 				else if (modulo == I_MINOR3 && minor3_adjust) {
 					k->hz = (1<<times) * lk->hz * (19.0/16.0);
 				}
+				else if (modulo == I_MAJOR6 && major6_adjust) {
+					k->hz = (1<<times) * lk->hz * ((just[I_MAJOR2]*just[I_P5] + just[I_MAJOR3]*just[I_P4]) / 2.0);
+				}
 				else {
-					k->hz = (1<<times) * lk->hz * justratios[modulo];
+					k->hz = (1<<times) * lk->hz * just[modulo];
 				}
 			}
 
@@ -187,14 +200,18 @@ void set_keyarray_state(const MIDIPacket *packet) {
 	UInt8 param1 = 0;
 	UInt8 velocity = 0;
 
+	struct MIDIkey_t *k;
+
 	switch (command) {
 		case MIDI_KEYDOWN:
 			keyindex = packet->data[1];
 			velocity = packet->data[2];
-			keys[keyindex].pressed = 1;
-			keys[keyindex].t = 0;
-			keys[keyindex].phase = 0;
-			keys[keyindex].A = (double)velocity/(double)0x7F;
+			k = &keys[keyindex];
+			k->pressed = 1;
+			k->t = 0;
+			k->phase = 0;
+			k->A = (double)velocity/(double)0x7F;
+			k->A *= k->A;
 			break;
 
 		case MIDI_KEYUP:
@@ -243,8 +260,9 @@ static void readproc(const MIDIPacketList *pktlist, void *readProcRefCon, void *
 	for (i=0; i<count; i++) {
 		//printPacketInfo(packet);
 		set_keyarray_state(packet);
-		packet = MIDIPacketNext(packet); // this is really necessary!! lol
+		packet = MIDIPacketNext(packet); // this is necessary!! lol
 	}
+
 	adjust_intonation(!left_pedal_down);
 }
 
@@ -285,6 +303,8 @@ int main(int argc, char *args[]) {
 
 	init_eqtemp_hztable();
 	memset(keys, 0, sizeof(keys));
+
+	int have_device = -1;
 	
 	for (int i = 0; i < ndevices; ++i) {
 		MIDIEndpointRef src = MIDIGetSource(i);
@@ -297,12 +317,28 @@ int main(int argc, char *args[]) {
 			printf("source %d: name: %s\n", i, str);
 		}
 
-		MIDIPortConnectSource(port, src, NULL);
+		printf("If you want to select this MIDI input, enter y:\n");
+		char buffer[256];
 
-		if (str) free(str);
+		fgets(buffer, 256, stdin);
+
+		if (strcmp(buffer, "y\n") == 0) {
+			MIDIPortConnectSource(port, src, NULL);
+			if (str) free(str);
+			i = ndevices;
+			have_device = i;
+			printf("Device %d selected!\n", i);
+		}
+	}
+
+	if (have_device == -1) {
+		printf("No device selected! Closing.\n");
+		return 0;
 	}
 
 	if (!init_output()) return 1;
+	if (!init_input()) return 1;
+	start_input();
 
 	CFRunLoopRef runLoop;
 	runLoop = CFRunLoopGetCurrent();
