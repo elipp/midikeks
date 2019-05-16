@@ -4,6 +4,7 @@
 #include "midi.h"
 #include "output.h"
 #include "input.h"
+#include "harmony.h"
 
 static void notifyproc(const MIDINotification *message, void *refCon) {
 
@@ -79,15 +80,20 @@ static int get_interval_mask(int startindex) {
 
 static int get_lowest_pressed() {
 	for (int i = 0; i < 128; ++i) {
-		if (keys[i].pressed) {
-			return i;
-		}
+		if (keys[i].pressed) return i;
 	}
 
 	return -1;
 }
 
-static void adjust_intonation(bool use_eqtemp) {
+static int get_highest_pressed() {
+    for (int i = 127; i >= 0; --i) {
+        if (keys[i].pressed) return i;
+    }
+    return -1;
+}
+
+static void adjust_intonation(bool use_eqtemp) { // adJUST XDDDD
 	static double just[] = {
 		1.0,
 		25.0/24.0,
@@ -295,6 +301,8 @@ int main(int argc, char *args[]) {
 	int ndevices = MIDIGetNumberOfSources();
 
 	printf("number of MIDI sources: %d\n", ndevices);
+
+    init_voicings();
 
 	if (ndevices < 1) {
 		fprintf(stderr, "no MIDI input devices detected, exiting!\n");

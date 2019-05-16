@@ -14,6 +14,7 @@
 
 static const double eqtemp_factor = 1.0594630943592953;
 //static const double eqtemp_factor = 1.055;
+//static const double eqtemp_factor = 1.03;
 const double TWOPI = 6.2831853071795865;
 
 static double eqtemp_hz[128];
@@ -200,6 +201,7 @@ static OSStatus rcallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFl
 				//samples[i] += A * k->A * waveform_sine_limit(k->hz, k->t, 0, 0.5);
 //				samples[i] += A * k->A * pcwaveform_sine_limit(k->hz, k->t, 0, 0.5);
 				samples[i] += 0.3 * A * k->A * pcwaveform_synthpiano(k->hz, k->t, 0);
+//				samples[i] += 
 	//			samples[i] += 0.3 * A * k->A * input[i];
 				k->t += GLOBAL_DT;
 			}
