@@ -53,17 +53,17 @@ static inline double limit(double d, double limit_abs) {
 static inline double waveform_sine_limit(double freq, double t, double phi, double limit_abs) {
 	double h = (27.5/freq);
 	double h2 = 0.5*h;
-	double d = sin(freq * TWOPI * t + phi) + 
-		h * sin(2*freq*TWOPI*t + phi)
-		+h * sin(3*freq*TWOPI*t + phi)
-		+h2 * waveform_triangle(4*freq, t, phi);
+	double d = sin(freq * TWOPI * t + phi)  
+		- h * sin(2*freq*TWOPI*t + phi)
+		+ h * sin(3*freq*TWOPI*t + phi)
+		- h2 * waveform_triangle(4*freq, t, phi);
 
 	return limit(d, limit_abs);
 }
 
 static double *sine_precalculated;
 
-#define PRECALC_SINE_RESOLUTION 128000 // this is plenty. sounds pretty ok with 1024 :D
+#define PRECALC_SINE_RESOLUTION (2*1024) // this is plenty. sounds pretty ok with 1024 :D
 
 static double *precalculate_sinusoid() {
 	double* w = malloc(PRECALC_SINE_RESOLUTION*sizeof(double));
@@ -86,24 +86,25 @@ static double pcsin(double s) {
 static double pcwaveform_sine_limit(double freq, double t, double phi, double limit_abs) {
 	double h = (27.5/freq);
 	double h2 = 0.5*h;
-	double d = pcsin(freq * TWOPI * t + phi) + 
-		h * pcsin(2*freq*TWOPI*t + phi)
-		+h * pcsin(3*freq*TWOPI*t + phi)
-		+h2 * waveform_triangle(4*freq, t, phi);
-	return limit(d, limit_abs);
+	double d = pcsin(freq * TWOPI * t + phi)  
+		- h * pcsin(2*freq*TWOPI*t + phi)
+		+ h * pcsin(3*freq*TWOPI*t + phi)
+		- h2 * waveform_triangle(4*freq, t, phi);
+
+	return limit(d, limit_abs)/limit_abs;
 
 }
 
 static double pcwaveform_synthpiano(double freq, double t, double phi) {
 	double T = freq*TWOPI*t;
 	double d = pcsin(1*T + phi) +
-		   0.75*pcsin(2*T + phi) +
+		   0.75*pcsin(2*T + phi) -
 		   0.20*pcsin(3*T + phi) +
-		   0.23*pcsin(4*T + phi) +
+		   0.23*pcsin(4*T + phi) -
 		   0.02*pcsin(5*T + phi) +
-		   0.03*pcsin(6*T + phi) +
+		   0.03*pcsin(6*T + phi) -
 		   0.003*pcsin(7*T + phi) +
-		   0.003*pcsin(8*T + phi) +
+		   0.003*pcsin(8*T + phi) -
 		   0.006*pcsin(9*T + phi);
 
 	return d;
@@ -188,34 +189,52 @@ static OSStatus rcallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFl
 	static const double A = 0.20 * 32768.0;
 	int num_keys = 0;
 
-	float *input = get_input_data();
+//	float *input = get_input_data();
+//
+//	for (int m = 20; m < 109; ++m) {
+//		struct MIDIkey_t *k = &keys[m];
+//		if (k->A > 0.001) {
+//#ifdef DUMP
+//			start_dumping();
+//#endif
+//			for (int i = 0; i < PREFERRED_FRAMESIZE; ++i) {
+//				//double tv = 0.0003*sin(5*TWOPI*t);
+//				//samples[i] += A * k->A * waveform_sine_limit(k->hz, k->t, 0, 0.5);
+////				samples[i] += A * k->A * pcwaveform_sine_limit(k->hz, k->t, 0, 0.5);
+//				samples[i] += 0.3 * A * k->A * pcwaveform_synthpiano(k->hz, k->t, 0);
+//	//			samples[i] += 0.3 * A * k->A * input[i];
+//				k->t += GLOBAL_DT;
+//			}
+//			
+//			k->phase = k->hz * k->t * TWOPI + 0;
+//
+//			if (k->pressed || sustain_pedal_down) {
+//				k->A *= 0.9995;
+//			} else {
+//				k->A *= 0.99;
+//			}
+//			++num_keys;
+//		}
+//        else {
+//            k->t = 0;
+//            k->phase = 0;
+//        }
+//
+//	}
 
-	for (int m = 20; m < 109; ++m) {
-		struct MIDIkey_t *k = &keys[m];
-		if (k->A > 0.001) {
-#ifdef DUMP
-			start_dumping();
-#endif
-			for (int i = 0; i < PREFERRED_FRAMESIZE; ++i) {
-				//double tv = 0.0003*sin(5*TWOPI*t);
-				//samples[i] += A * k->A * waveform_sine_limit(k->hz, k->t, 0, 0.5);
-//				samples[i] += A * k->A * pcwaveform_sine_limit(k->hz, k->t, 0, 0.5);
-				samples[i] += 0.3 * A * k->A * pcwaveform_synthpiano(k->hz, k->t, 0);
-//				samples[i] += 
-	//			samples[i] += 0.3 * A * k->A * input[i];
-				k->t += GLOBAL_DT;
-			}
-			
-			k->phase = k->hz * k->t * TWOPI + 0;
+    for (int m = 0; m < mqueue.num_events; ++m) {
+        mevent_t *e = &mqueue.events[m];
+        for (int i = 0; i < PREFERRED_FRAMESIZE; ++i) {
+            samples[i] += 0.3 * A * e->A * 
+               pcwaveform_sine_limit(e->hz, e->t, 0, modulation);
+                //pcwaveform_synthpiano(e->hz, e->t, 0);
+            e->t += GLOBAL_DT;
+        }
+        e->phase = e->hz * e->t * TWOPI;
+    }
 
-			if (!k->pressed && !sustain_pedal_down) {
-				k->A *= 0.99;
-			} else {
-				k->A *= 0.9995;
-			}
-			++num_keys;
-		}
-	}
+    mqueue_purge(&mqueue);
+    mqueue_update(&mqueue);
 
 #ifdef DUMP
 	if (get_current_dumpoffset() + PREFERRED_FRAMESIZE >= DUMPSAMPLES) stop_dumping();

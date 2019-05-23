@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <CoreMIDI/CoreMIDI.h>
 //#include <GameController/GCController.h>
 #include "midi.h"
@@ -10,13 +11,68 @@ static void notifyproc(const MIDINotification *message, void *refCon) {
 
 }
 
-MIDIKEY_t keys[128];
+mqueue_t mqueue;
+
+double modulation = 1.0;
+
+mevent_t mevent_new(int keyindex, double hz, double A) {
+    mevent_t e; 
+    e.keyindex = keyindex;
+    e.hz = hz;
+    e.A = A;
+    e.t = 0;
+    e.phase = 0;
+    return e;
+}
+
+void mqueue_init(mqueue_t *q) {
+    memset(q->events, 0x0, sizeof(q->events));
+}
+
+void mqueue_add(mqueue_t *q, mevent_t *e) {
+//    printf("adding %f to queue at index %d\n", e->hz, q->num_events);
+    q->events[q->num_events] = *e; 
+    ++q->num_events;
+}
+
+void mqueue_delete_at(mqueue_t *q, int i) {
+ //   printf("num_events: %d, i: %d\n", q->num_events, i);
+    if (i >= q->num_events) {
+        return; // print a warning maybe
+    }
+    for (int j = i; j < q->num_events-1; ++j) {
+        q->events[j] = q->events[j+1];
+    }   
+    --q->num_events;
+
+}
+
+void mqueue_update(mqueue_t *q) {
+    for (int i = 0; i < q->num_events; ++i) {
+        mevent_t *e = &q->events[i];
+        if (keys[e->keyindex].pressed) {
+            e->A *= 0.9995;
+        }
+        else {
+            e->A *= 0.99;
+        }
+    }
+}
+
+void mqueue_purge(mqueue_t *q) {
+    for (int i = 0; i < q->num_events; ++i) {
+        if (q->events[i].A < 0.001) {
+            // this should work?
+            mqueue_delete_at(q, i);
+            mqueue_purge(q);
+            return;
+        }
+    }
+}
+
+MIDIkey_t keys[128];
 int sustain_pedal_down = 0;
 static int left_pedal_down = 0;
-
-#define MIDI_KEYUP 0x80
-#define MIDI_KEYDOWN 0x90
-#define MIDI_PEDAL 0xB0
 
 void printPacketInfo(const MIDIPacket* packet) {
 	double timeinsec = packet->timeStamp / (double)1e9;
@@ -35,7 +91,7 @@ void printPacketInfo(const MIDIPacket* packet) {
 }
 
 static void print_currently_pressed_keys() {
-	for (int m = 20; m < 109; ++m) {
+	for (int m = KEY_MIN; m < KEY_MAX; ++m) {
 		struct MIDIkey_t *k = &keys[m];
 		if (k->pressed == 1) {
 			printf("%d ", m);
@@ -152,7 +208,7 @@ static void adjust_intonation(bool use_eqtemp) { // adJUST XDDDD
 
 	while (lowest < 21) lowest += 12;
 
-	MIDIKEY_t *lk = &keys[lowest];
+	MIDIkey_t *lk = &keys[lowest];
 	double lkorig_hz = lk->hz;
 	lk->hz = midikey_to_hz(lowest);
 
@@ -162,7 +218,7 @@ static void adjust_intonation(bool use_eqtemp) { // adJUST XDDDD
 	}
 
 	for (int i = lowest + 1; i < 128; ++i) {
-		MIDIKEY_t *k = &keys[i];
+		MIDIkey_t *k = &keys[i];
 		if (k->A > 0.001) {
 			double orig_hz = k->hz;
 			int interval = (i - lowest);
@@ -200,27 +256,79 @@ static void adjust_intonation(bool use_eqtemp) { // adJUST XDDDD
 
 }
 
+static void key_on(MIDIkey_t *k, UInt8 velocity) {
+    if (velocity == 0) {
+        k->pressed = 0;
+        return;
+    }
+
+    k->pressed = 1;
+    k->A = (double)velocity/(double)0x7F;
+    k->A = k->A * k->A; // exponential? ok
+
+
+}
+
+static void key_on2(UInt8 keyindex, UInt8 velocity) {
+
+    if (velocity == 0) {
+        return;
+    }
+
+    double A = (double)velocity/(double)0x7F;
+    A *= A; // exponential? ok
+
+    mevent_t e = mevent_new(keyindex, midikey_to_hz(keyindex), A);
+    mqueue_add(&mqueue, &e);
+
+    const voicing_t *v = get_voicing(keyindex);
+
+    int i = 0;
+    while (v->members[i] != E_END) { ++i; }
+    int highest = v->pitches[i-1];
+    int bass = keyindex - highest;
+//    printf("keyindex: %d, highest: %d, bass %d (bass + highest = %d)\n", keyindex, highest, bass, bass + highest);
+    
+    mevent_t ve = mevent_new(keyindex, midikey_to_hz(bass - 12), 0.8*A);
+    mqueue_add(&mqueue, &ve);
+
+    i = 0;
+    while (v->members[i] != E_END) {
+        ve = mevent_new(keyindex, midikey_to_hz(bass + v->pitches[i]), 0.75*A);
+        mqueue_add(&mqueue, &ve);
+        ++i;
+    }
+
+}
+
+static void key_off_all() {
+    for (int i = KEY_MIN; i < KEY_MAX; ++i) {
+		struct MIDIkey_t *k = &keys[i];
+        k->pressed = 0;
+    }
+}
+
 void set_keyarray_state(const MIDIPacket *packet) {
 	UInt8 command = packet->data[0];
 	UInt8 keyindex = 0;
 	UInt8 param1 = 0;
 	UInt8 velocity = 0;
 
-	struct MIDIkey_t *k;
+	struct MIDIkey_t *k = NULL;
 
 	switch (command) {
 		case MIDI_KEYDOWN:
 			keyindex = packet->data[1];
 			velocity = packet->data[2];
 			k = &keys[keyindex];
-			k->pressed = 1;
-			k->t = 0;
-			k->phase = 0;
-			k->A = (double)velocity/(double)0x7F;
-			k->A *= k->A;
+
+            key_on(k, velocity);
+            key_on2(keyindex, velocity);
+
 			break;
 
 		case MIDI_KEYUP:
+            // OK so apparently, not all midi devices use this; some of them use a KEYDOWN of velocity 0 instead (see key_on())
 			keyindex = packet->data[1];
 			keys[keyindex].pressed = 0;
 			break;
@@ -230,6 +338,8 @@ void set_keyarray_state(const MIDIPacket *packet) {
 #define PEDAL_UNACORDA 0x43
 #define PEDAL_MIDDLE 0x42
 #define PEDAL_SUSTAIN 0x40
+#define MODULATION_WHEEL 0x1
+
 			keyindex = packet->data[1];
 			param1 = packet->data[2];
 
@@ -251,6 +361,10 @@ void set_keyarray_state(const MIDIPacket *packet) {
 				}
 				else left_pedal_down = 0;
 			}
+            else if (keyindex == MODULATION_WHEEL) {
+                modulation = (double)param1 / (double)0x7F;
+                //printf("modulation: %f\n", modulation);
+            }
 			break;
 
 		default:
@@ -264,9 +378,9 @@ static void readproc(const MIDIPacketList *pktlist, void *readProcRefCon, void *
 	int i;
 	int count = pktlist->numPackets;
 	for (i=0; i<count; i++) {
-		//printPacketInfo(packet);
+//		printPacketInfo(packet);
 		set_keyarray_state(packet);
-		packet = MIDIPacketNext(packet); // this is necessary!! lol
+		packet = MIDIPacketNext(packet); // this is quite necessary lol
 	}
 
 	adjust_intonation(!left_pedal_down);
@@ -290,7 +404,10 @@ char *cfstring_to_cstr(CFStringRef aString) {
 	return NULL;
 }
 
-int main(int argc, char *args[]) {
+static int select_MIDI_input() {
+
+
+    int device_index = -1;
 
 	MIDIClientRef cl;
 	MIDIClientCreate (CFSTR("MOII"), notifyproc, NULL, &cl);
@@ -299,54 +416,78 @@ int main(int argc, char *args[]) {
 	MIDIInputPortCreate(cl, CFSTR("MOII input"), readproc, NULL, &port);
 
 	int ndevices = MIDIGetNumberOfSources();
-
 	printf("number of MIDI sources: %d\n", ndevices);
-
-    init_voicings();
-
-	if (ndevices < 1) {
+ 
+    if (ndevices < 1) {
 		fprintf(stderr, "no MIDI input devices detected, exiting!\n");
 		return 0;
 	}
+    else if (ndevices == 1) {
+        MIDIEndpointRef src = MIDIGetSource(0);
+        CFStringRef name;
+        OSStatus err = MIDIObjectGetStringProperty(src, kMIDIPropertyName, &name);
 
-	init_eqtemp_hztable();
-	memset(keys, 0, sizeof(keys));
+        char *device_name = cfstring_to_cstr(name);
+        if (err == noErr) {
+            printf("Defaulting to input device 0 (%s) (only 1 MIDI input device available)\n", device_name);
+        }
 
-	int have_device = -1;
-	
-	for (int i = 0; i < ndevices; ++i) {
-		MIDIEndpointRef src = MIDIGetSource(i);
-		CFStringRef name;
-		OSStatus err = MIDIObjectGetStringProperty(src, kMIDIPropertyName, &name);
+        MIDIPortConnectSource(port, src, NULL);
 
-		char *str = cfstring_to_cstr(name);
+        device_index = 0;
+        free(device_name);
+    }
+    
+    else {
+        for (int i = 0; i < ndevices; ++i) {
+            MIDIEndpointRef src = MIDIGetSource(i);
+            CFStringRef name;
+            OSStatus err = MIDIObjectGetStringProperty(src, kMIDIPropertyName, &name);
 
-		if (err == noErr) {
-			printf("source %d: name: %s\n", i, str);
-		}
+            char *device_name = cfstring_to_cstr(name);
 
-		printf("If you want to select this MIDI input, enter y:\n");
-		char buffer[256];
+            if (err == noErr) {
+                printf("source %d: name: %s\n", i, device_name);
+            }
 
-		fgets(buffer, 256, stdin);
+            printf("If you want to select this MIDI input, enter y:\n");
+            char buffer[256];
 
-		if (strcmp(buffer, "y\n") == 0) {
-			MIDIPortConnectSource(port, src, NULL);
-			if (str) free(str);
-			i = ndevices;
-			have_device = i;
-			printf("Device %d selected!\n", i);
-		}
-	}
+            fgets(buffer, 256, stdin);
 
-	if (have_device == -1) {
+            if (strcmp(buffer, "y\n") == 0) {
+                MIDIPortConnectSource(port, src, NULL);
+                if (device_name) free(device_name);
+                device_index = i;
+                printf("Device %d selected!\n", i);
+                break;
+            }
+        }
+    }
+
+	if (device_index == -1) {
 		printf("No device selected! Closing.\n");
 		return 0;
 	}
 
+    return 1;
+
+}
+
+int main(int argc, char *args[]) {
+
+    srand(time(NULL));
+	memset(keys, 0, sizeof(keys));
+    mqueue_init(&mqueue);
+
+	init_eqtemp_hztable();
+    init_voicings();
+		
+    if (!select_MIDI_input()) return 1;
+
 	if (!init_output()) return 1;
-	if (!init_input()) return 1;
-	start_input();
+//	if (!init_input()) return 1;
+//	start_input();
 
 	CFRunLoopRef runLoop;
 	runLoop = CFRunLoopGetCurrent();

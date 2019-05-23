@@ -1,6 +1,15 @@
 #ifndef MIDI_H
 #define MIDI_H
 
+#define MIDI_KEYUP 0x80
+#define MIDI_KEYDOWN 0x90
+#define MIDI_PEDAL 0xB0
+
+#define KEY_MIN 20
+#define KEY_MAX 109 
+
+//#define DUMP
+
 typedef struct MIDIkey_t {
 	int pressed;
 	int velocity;
@@ -8,10 +17,37 @@ typedef struct MIDIkey_t {
 	double A;
 	double hz; 
 	double phase;
-} MIDIKEY_t;
+} MIDIkey_t;
 
-extern MIDIKEY_t keys[];
+typedef struct mevent_t {
+    double t;
+    double A;
+    double hz;
+    double phase;
+    double decay;
+    int keyindex;
+    // add sound here too
+} mevent_t;
 
+typedef struct mqueue_t {
+    mevent_t events[256]; // that should be quite enough
+    int num_events;
+} mqueue_t;
+
+extern MIDIkey_t keys[];
+
+mevent_t mevent_new(int keyindex, double hz, double A);
+
+void mqueue_init(mqueue_t *q);
+void mqueue_add(mqueue_t *q, mevent_t *e);
+void mqueue_purge();
+void mqueue_delete_at(mqueue_t *q, int i);
+
+void mqueue_update();
+
+extern mqueue_t mqueue;
 extern int sustain_pedal_down;
+
+extern double modulation;
 
 #endif
