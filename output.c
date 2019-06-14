@@ -186,6 +186,7 @@ static OSStatus rcallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFl
 	short *samples = (short*)b->mData;
 	memset(samples, 0, b->mDataByteSize);
 
+
 	static const double A = 0.20 * 32768.0;
 	int num_keys = 0;
 
@@ -222,17 +223,44 @@ static OSStatus rcallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFl
 //
 //	}
 
-    for (int m = 0; m < mqueue.num_events; ++m) {
-        mevent_t *e = &mqueue.events[m];
-        for (int i = 0; i < PREFERRED_FRAMESIZE; ++i) {
-            samples[i] += 0.3 * A * e->A * 
-               pcwaveform_sine_limit(e->hz, e->t, 0, modulation);
-                //pcwaveform_synthpiano(e->hz, e->t, 0);
-            e->t += GLOBAL_DT;
+    if (b->mNumberChannels == 1) {
+        for (int m = 0; m < mqueue.num_events; ++m) {
+            mevent_t *e = &mqueue.events[m];
+            for (int i = 0; i < b->mDataByteSize/sizeof(short); ++i) {
+                samples[i] += 0.3 * A * e->A * 
+                   pcwaveform_sine_limit(e->hz, e->t, 0, modulation);
+                    //pcwaveform_synthpiano(e->hz, e->t, 0);
+                e->t += GLOBAL_DT;
+                }
+            e->phase = e->hz * e->t * TWOPI;
         }
-        e->phase = e->hz * e->t * TWOPI;
     }
 
+    else if (b->mNumberChannels == 2) {
+        // the data is expected to be in an interleaved arrangement
+        for (int m = 0; m < mqueue.num_events; ++m) {
+            mevent_t *e = &mqueue.events[m];
+            for (int i = 0; i < b->mDataByteSize/sizeof(short)/2; ++i) {
+                double fA = 0.0001 * 0.3 * A * e->A;
+//                short val = 0.3 * A * e->A * 
+ //                   pcwaveform_sine_limit(e->hz, e->t, 0, modulation);
+                    //pcwaveform_synthpiano(e->hz, e->t, 0);
+                short Lval = fA * e->sample->samples[e->sample_index];
+                short Rval = fA * e->sample->samples[e->sample_index+1];
+
+                samples[2*i] += Lval; 
+                samples[2*i + 1] = Rval;
+
+                if (e->sample_index < 1000) {
+                    //printf("%d, %d\n", samples[2*i], samples[2*i + 1]);
+                }
+                e->t += GLOBAL_DT;
+                e->sample_index += 2;
+            }
+            e->phase = e->hz * e->t * TWOPI;
+        }
+
+    }
     mqueue_purge(&mqueue);
     mqueue_update(&mqueue);
 
@@ -383,7 +411,7 @@ int init_output() {
 	cb.inputProc = rcallback;
 	cb.inputProcRefCon = NULL;
 
-	if (!open_audio(FMT_S16_LE, 44100, 1, &cb)) return 0;
+	if (!open_audio(FMT_S16_LE, 44100, 2, &cb)) return 0;
 
 	return 1;
 }

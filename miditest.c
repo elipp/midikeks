@@ -6,22 +6,26 @@
 #include "output.h"
 #include "input.h"
 #include "harmony.h"
+#include "samples.h"
 
 static void notifyproc(const MIDINotification *message, void *refCon) {
 
 }
 
 mqueue_t mqueue;
+sound_t *sound = NULL;
 
 double modulation = 1.0;
 
-mevent_t mevent_new(int keyindex, double hz, double A) {
+mevent_t mevent_new(int keyindex, double hz, double A, sample_t *sample) {
     mevent_t e; 
     e.keyindex = keyindex;
     e.hz = hz;
     e.A = A;
     e.t = 0;
     e.phase = 0;
+    e.sample = sample;
+    e.sample_index = 0;
     return e;
 }
 
@@ -269,7 +273,7 @@ static void key_on(MIDIkey_t *k, UInt8 velocity) {
 
 }
 
-static void key_on2(UInt8 keyindex, UInt8 velocity) {
+static void key_on2(UInt8 keyindex, UInt8 velocity, int harmony_enabled) {
 
     if (velocity == 0) {
         return;
@@ -278,8 +282,10 @@ static void key_on2(UInt8 keyindex, UInt8 velocity) {
     double A = (double)velocity/(double)0x7F;
     A *= A; // exponential? ok
 
-    mevent_t e = mevent_new(keyindex, midikey_to_hz(keyindex), A);
+    mevent_t e = mevent_new(keyindex, midikey_to_hz(keyindex), A, get_sample(sound, keyindex));
     mqueue_add(&mqueue, &e);
+
+    if (!harmony_enabled) return;
 
     const voicing_t *v = get_voicing(keyindex);
 
@@ -289,12 +295,12 @@ static void key_on2(UInt8 keyindex, UInt8 velocity) {
     int bass = keyindex - highest;
 //    printf("keyindex: %d, highest: %d, bass %d (bass + highest = %d)\n", keyindex, highest, bass, bass + highest);
     
-    mevent_t ve = mevent_new(keyindex, midikey_to_hz(bass - 12), 0.8*A);
-    mqueue_add(&mqueue, &ve);
+    mevent_t ve = mevent_new(keyindex, midikey_to_hz(bass - 12), 0.8*A, get_sample(sound, bass-12));
+ //   mqueue_add(&mqueue, &ve);
 
     i = 0;
     while (v->members[i] != E_END) {
-        ve = mevent_new(keyindex, midikey_to_hz(bass + v->pitches[i]), 0.75*A);
+        ve = mevent_new(keyindex, midikey_to_hz(bass + v->pitches[i]), 0.75*A, get_sample(sound, bass + v->pitches[i]));
         mqueue_add(&mqueue, &ve);
         ++i;
     }
@@ -323,7 +329,7 @@ void set_keyarray_state(const MIDIPacket *packet) {
 			k = &keys[keyindex];
 
             key_on(k, velocity);
-            key_on2(keyindex, velocity);
+            key_on2(keyindex, velocity, 0);
 
 			break;
 
@@ -482,6 +488,8 @@ int main(int argc, char *args[]) {
 
 	init_eqtemp_hztable();
     init_voicings();
+
+    sound = load_sound(SAMPLE_TYPE_RAW, "samples/16/raws/piano_%d.raw", 2);
 		
     if (!select_MIDI_input()) return 1;
 

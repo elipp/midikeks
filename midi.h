@@ -8,7 +8,9 @@
 #define KEY_MIN 20
 #define KEY_MAX 109 
 
-//#define DUMP
+#define DUMP
+
+#include "samples.h"
 
 typedef struct MIDIkey_t {
 	int pressed;
@@ -26,6 +28,8 @@ typedef struct mevent_t {
     double phase;
     double decay;
     int keyindex;
+    sample_t *sample;
+    int sample_index;
     // add sound here too
 } mevent_t;
 
@@ -36,7 +40,7 @@ typedef struct mqueue_t {
 
 extern MIDIkey_t keys[];
 
-mevent_t mevent_new(int keyindex, double hz, double A);
+mevent_t mevent_new(int keyindex, double hz, double A, sample_t *sample);
 
 void mqueue_init(mqueue_t *q);
 void mqueue_add(mqueue_t *q, mevent_t *e);
@@ -46,6 +50,7 @@ void mqueue_delete_at(mqueue_t *q, int i);
 void mqueue_update();
 
 extern mqueue_t mqueue;
+extern sound_t *sound;
 extern int sustain_pedal_down;
 
 extern double modulation;
