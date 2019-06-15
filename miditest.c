@@ -63,8 +63,11 @@ void mqueue_update(mqueue_t *q) {
             }
         }
         else {
-            if (keys[e->keyindex].pressed) {
+            if (!keys[e->keyindex].pressed) {
                 e->A *= 0.99;
+            }
+            else {
+                e->A = 1;
             }
         }
     }

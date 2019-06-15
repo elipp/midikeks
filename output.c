@@ -249,7 +249,7 @@ static OSStatus rcallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFl
  //               short Rval = val;
                     //pcwaveform_synthpiano(e->hz, e->t, 0);
                 short Lval = fA * e->sample->samples[e->sample_index];
-               short Rval = fA * e->sample->samples[e->sample_index+1];
+                short Rval = fA * e->sample->samples[e->sample_index+1];
 
                 samples[2*i] += Lval;
                 samples[2*i + 1] += Rval;
