@@ -244,10 +244,11 @@ static OSStatus rcallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFl
                   double fA = 0.3 * e->A; 
                   
 //                short val = 0.3 * SHORT_MAX * e->A * 
- //                  pcwaveform_sine_limit(e->hz, e->t, 0, modulation);
-//                short Lval = val;
- //               short Rval = val;
+                    //pcwaveform_sine_limit(e->hz, e->t, 0, modulation);
                     //pcwaveform_synthpiano(e->hz, e->t, 0);
+//                short Lval = val;
+//               short Rval = val;
+                    
                 short Lval = fA * e->sample->samples[e->sample_index];
                 short Rval = fA * e->sample->samples[e->sample_index+1];
 

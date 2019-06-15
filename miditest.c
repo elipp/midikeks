@@ -64,11 +64,9 @@ void mqueue_update(mqueue_t *q) {
         }
         else {
             if (!keys[e->keyindex].pressed) {
-                e->A *= 0.99;
+                e->A *= 0.995;
             }
-            else {
-                e->A = 1;
-            }
+            // else e->A = 1 ?
         }
     }
 }
@@ -339,7 +337,7 @@ void set_keyarray_state(const MIDIPacket *packet) {
 			k = &keys[keyindex];
 
             key_on(k, velocity);
-            key_on2(keyindex, velocity, 0);
+            key_on2(keyindex, velocity, 1);
 
 			break;
 
