@@ -10,7 +10,8 @@
 
 //typedef OSStatus (*AURenderCallback)(void *inRefCon, AudioUnitRenderActionFlags *ioActionFlags, const AudioTimeStamp *inTimeStamp, UInt32 inBusNumber, UInt32 inNumberFrames, AudioBufferList *ioData);
 
-#define PREFERRED_FRAMESIZE 32
+#define PREFERRED_FRAMESIZE 16
+static const double SHORT_MAX = 32768.0;
 
 static const double eqtemp_factor = 1.0594630943592953;
 //static const double eqtemp_factor = 1.055;
@@ -186,8 +187,6 @@ static OSStatus rcallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFl
 	short *samples = (short*)b->mData;
 	memset(samples, 0, b->mDataByteSize);
 
-
-	static const double A = 0.20 * 32768.0;
 	int num_keys = 0;
 
 //	float *input = get_input_data();
@@ -227,7 +226,7 @@ static OSStatus rcallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFl
         for (int m = 0; m < mqueue.num_events; ++m) {
             mevent_t *e = &mqueue.events[m];
             for (int i = 0; i < b->mDataByteSize/sizeof(short); ++i) {
-                samples[i] += 0.3 * A * e->A * 
+                samples[i] += 0.3 * SHORT_MAX * e->A * 
                    pcwaveform_sine_limit(e->hz, e->t, 0, modulation);
                     //pcwaveform_synthpiano(e->hz, e->t, 0);
                 e->t += GLOBAL_DT;
@@ -240,20 +239,21 @@ static OSStatus rcallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFl
         // the data is expected to be in an interleaved arrangement
         for (int m = 0; m < mqueue.num_events; ++m) {
             mevent_t *e = &mqueue.events[m];
-            for (int i = 0; i < b->mDataByteSize/sizeof(short)/2; ++i) {
-                double fA = 0.0001 * 0.3 * A * e->A;
-//                short val = 0.3 * A * e->A * 
- //                   pcwaveform_sine_limit(e->hz, e->t, 0, modulation);
+            for (int i = 0; i < b->mDataByteSize/sizeof(short)/b->mNumberChannels; ++i) {
+                  // e->A for samples has a separate block :)
+                  double fA = 0.3 * e->A; 
+                  
+//                short val = 0.3 * SHORT_MAX * e->A * 
+ //                  pcwaveform_sine_limit(e->hz, e->t, 0, modulation);
+//                short Lval = val;
+ //               short Rval = val;
                     //pcwaveform_synthpiano(e->hz, e->t, 0);
                 short Lval = fA * e->sample->samples[e->sample_index];
-                short Rval = fA * e->sample->samples[e->sample_index+1];
+               short Rval = fA * e->sample->samples[e->sample_index+1];
 
-                samples[2*i] += Lval; 
-                samples[2*i + 1] = Rval;
+                samples[2*i] += Lval;
+                samples[2*i + 1] += Rval;
 
-                if (e->sample_index < 1000) {
-                    //printf("%d, %d\n", samples[2*i], samples[2*i + 1]);
-                }
                 e->t += GLOBAL_DT;
                 e->sample_index += 2;
             }

@@ -54,11 +54,18 @@ void mqueue_delete_at(mqueue_t *q, int i) {
 void mqueue_update(mqueue_t *q) {
     for (int i = 0; i < q->num_events; ++i) {
         mevent_t *e = &q->events[i];
-        if (keys[e->keyindex].pressed) {
-            e->A *= 0.9995;
+        if (!e->sample) {
+            if (keys[e->keyindex].pressed) {
+                e->A *= 0.9995;
+            }
+            else {
+                e->A *= 0.99;
+            }
         }
         else {
-            e->A *= 0.99;
+            if (keys[e->keyindex].pressed) {
+                e->A *= 0.99;
+            }
         }
     }
 }
