@@ -3,14 +3,19 @@
 
 #define MIDI_KEYUP 0x80
 #define MIDI_KEYDOWN 0x90
-#define MIDI_PEDAL 0xB0
+#define MIDI_CONTROL 0xB0
 
-#define KEY_MIN 20
-#define KEY_MAX 109 
+#define MIDIKEY_MIN 20
+#define MIDIKEY_MAX 109 
 
 #define DUMP
 
 #include "samples.h"
+
+enum {
+    HARMONY_DISABLED = 0,
+    HARMONY_ENABLED
+};
 
 typedef struct MIDIkey_t {
 	int pressed;

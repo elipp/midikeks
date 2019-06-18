@@ -1,7 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <CoreMIDI/CoreMIDI.h>
-//#include <GameController/GCController.h>
+#include <pthread.h>
+#include <curses.h>
 #include "midi.h"
 #include "output.h"
 #include "input.h"
@@ -12,8 +13,12 @@ static void notifyproc(const MIDINotification *message, void *refCon) {
 
 }
 
+
+
 mqueue_t mqueue;
 sound_t *sound = NULL;
+static int sound_enabled = 1;
+static int harmony_enabled = 0;
 
 double modulation = 1.0;
 
@@ -103,7 +108,7 @@ void printPacketInfo(const MIDIPacket* packet) {
 }
 
 static void print_currently_pressed_keys() {
-	for (int m = KEY_MIN; m < KEY_MAX; ++m) {
+	for (int m = MIDIKEY_MIN; m < MIDIKEY_MAX; ++m) {
 		struct MIDIkey_t *k = &keys[m];
 		if (k->pressed == 1) {
 			printf("%d ", m);
@@ -281,7 +286,7 @@ static void key_on(MIDIkey_t *k, UInt8 velocity) {
 
 }
 
-static void key_on2(UInt8 keyindex, UInt8 velocity, int harmony_enabled) {
+static void key_on2(UInt8 keyindex, UInt8 velocity) {
 
     if (velocity == 0) {
         return;
@@ -290,7 +295,9 @@ static void key_on2(UInt8 keyindex, UInt8 velocity, int harmony_enabled) {
     double A = (double)velocity/(double)0x7F;
     A *= A; // exponential? ok
 
-    mevent_t e = mevent_new(keyindex, midikey_to_hz(keyindex), A, get_sample(sound, keyindex));
+    mevent_t e = mevent_new(keyindex, midikey_to_hz(keyindex), A, 
+            sound_enabled ? get_sample(sound, keyindex) : NULL);
+
     mqueue_add(&mqueue, &e);
 
     if (!harmony_enabled) return;
@@ -303,12 +310,14 @@ static void key_on2(UInt8 keyindex, UInt8 velocity, int harmony_enabled) {
     int bass = keyindex - highest;
 //    printf("keyindex: %d, highest: %d, bass %d (bass + highest = %d)\n", keyindex, highest, bass, bass + highest);
     
-    mevent_t ve = mevent_new(keyindex, midikey_to_hz(bass - 12), 0.8*A, get_sample(sound, bass-12));
+    mevent_t ve = mevent_new(keyindex, midikey_to_hz(bass - 12), 0.8*A, 
+            sound_enabled ? get_sample(sound, bass-12) : NULL);
  //   mqueue_add(&mqueue, &ve);
 
     i = 0;
     while (v->members[i] != E_END) {
-        ve = mevent_new(keyindex, midikey_to_hz(bass + v->pitches[i]), 0.75*A, get_sample(sound, bass + v->pitches[i]));
+        ve = mevent_new(keyindex, midikey_to_hz(bass + v->pitches[i]), 0.75*A, 
+                sound_enabled ? get_sample(sound, bass + v->pitches[i]) : NULL);
         mqueue_add(&mqueue, &ve);
         ++i;
     }
@@ -337,7 +346,7 @@ void set_keyarray_state(const MIDIPacket *packet) {
 			k = &keys[keyindex];
 
             key_on(k, velocity);
-            key_on2(keyindex, velocity, 1);
+            key_on2(keyindex, velocity);
 
 			break;
 
@@ -347,12 +356,13 @@ void set_keyarray_state(const MIDIPacket *packet) {
 			keys[keyindex].pressed = 0;
 			break;
 
-		case MIDI_PEDAL:
+		case MIDI_CONTROL:
 
 #define PEDAL_UNACORDA 0x43
 #define PEDAL_MIDDLE 0x42
 #define PEDAL_SUSTAIN 0x40
 #define MODULATION_WHEEL 0x1
+#define VOLUME 0x7
 
 			keyindex = packet->data[1];
 			param1 = packet->data[2];
@@ -378,6 +388,9 @@ void set_keyarray_state(const MIDIPacket *packet) {
             else if (keyindex == MODULATION_WHEEL) {
                 modulation = (double)param1 / (double)0x7F;
                 //printf("modulation: %f\n", modulation);
+            }
+            else if (keyindex == VOLUME) {
+                eqtemp_factor = eqtemp_12 + 0.05*(double)(param1 - 0x3F)/(double)0x7F; 
             }
 			break;
 
@@ -488,6 +501,44 @@ static int select_MIDI_input() {
 
 }
 
+void init_curses() {
+    initscr(); 
+    cbreak(); 
+    noecho(); 
+    nonl(); 
+    intrflush(stdscr, FALSE); 
+    keypad(stdscr, TRUE);
+
+    mvaddstr(0, 0, "--- JOOH JUUH MIDII JA SILLEE ---");
+    mvaddstr(2, 0, "* press P to toggle piano sample sound");
+    mvaddstr(3, 0, "* press H to toggle automatic harmony");
+
+    refresh();
+
+}
+
+void *key_loop(void * _Nullable arg) {
+
+    for (;;) {
+        int c = getch();
+        switch (c) {
+            case 'p':
+            case 'P':
+                sound_enabled = !sound_enabled;   
+                break;
+
+            case 'h':
+            case 'H':
+                harmony_enabled = !harmony_enabled;
+                break;
+
+            default:
+                break;
+
+        }
+    }
+}
+
 int main(int argc, char *args[]) {
 
     srand(time(NULL));
@@ -505,9 +556,16 @@ int main(int argc, char *args[]) {
 //	if (!init_input()) return 1;
 //	start_input();
 
+    init_curses();
+
+    pthread_t th;
+    pthread_create(&th, NULL, key_loop, NULL);
+
 	CFRunLoopRef runLoop;
 	runLoop = CFRunLoopGetCurrent();
 	CFRunLoopRun();
+
+    pthread_exit(NULL);
 
 	return 0;
 }

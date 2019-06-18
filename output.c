@@ -11,11 +11,12 @@
 //typedef OSStatus (*AURenderCallback)(void *inRefCon, AudioUnitRenderActionFlags *ioActionFlags, const AudioTimeStamp *inTimeStamp, UInt32 inBusNumber, UInt32 inNumberFrames, AudioBufferList *ioData);
 
 #define PREFERRED_FRAMESIZE 16
-static const double SHORT_MAX = 32768.0;
+static const double SHORT_MAX = 32767.0;
+static const double SHORT_MAX_R = 1.0/SHORT_MAX;
 
-static const double eqtemp_factor = 1.0594630943592953;
-//static const double eqtemp_factor = 1.055;
-//static const double eqtemp_factor = 1.03;
+const double eqtemp_12 = 1.0594630943592953;
+double eqtemp_factor = eqtemp_12;
+
 const double TWOPI = 6.2831853071795865;
 
 static double eqtemp_hz[128];
@@ -115,6 +116,7 @@ static double pcwaveform_synthpiano(double freq, double t, double phi) {
 double midikey_to_hz(int index) {
 	// key 21 maps to lowest A (27.5 Hz @ A=440Hz)
 	// key 108 maps to highest C
+   // return 27.5*pow(eqtemp_factor, (index-21));
 
 	return eqtemp_hz[index];
 }
@@ -179,15 +181,23 @@ static int get_current_dumpoffset() {
 	return dumpoffset;
 }
 
+static inline double clamp(double in, double min, double max) {
+    if (in > max) return max;
+    if (in < min) return min;
+    return in;
+}
+
 static OSStatus rcallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFlags, const AudioTimeStamp *inTimeStamp, UInt32 inBusNumber, UInt32 inNumberFrames, AudioBufferList *ioData) {
 	//printf("%f\n", inTimeStamp->mSampleTime);
 
 	AudioBuffer *b = &ioData->mBuffers[0];
 
 	short *samples = (short*)b->mData;
-	memset(samples, 0, b->mDataByteSize);
+//	memset(samples, 0, b->mDataByteSize);
 
 	int num_keys = 0;
+    double fbuf[128*2]; // the buffer is most likely never going to be over 32 samples (because of delay) so this should be fine
+    memset(fbuf, 0, sizeof(fbuf));
 
 //	float *input = get_input_data();
 //
@@ -239,26 +249,38 @@ static OSStatus rcallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFl
         // the data is expected to be in an interleaved arrangement
         for (int m = 0; m < mqueue.num_events; ++m) {
             mevent_t *e = &mqueue.events[m];
-            for (int i = 0; i < b->mDataByteSize/sizeof(short)/b->mNumberChannels; ++i) {
-                  // e->A for samples has a separate block :)
-                  double fA = 0.3 * e->A; 
-                  
-//                short val = 0.3 * SHORT_MAX * e->A * 
-                    //pcwaveform_sine_limit(e->hz, e->t, 0, modulation);
-                    //pcwaveform_synthpiano(e->hz, e->t, 0);
-//                short Lval = val;
-//               short Rval = val;
+            if (e->sample) {
+                for (int i = 0; i < b->mDataByteSize/sizeof(short)/b->mNumberChannels; ++i) {
+                    // e->A for samples has a separate block :)
+                    double fA = 0.33 * e->A; 
+                    double Lval = fA * SHORT_MAX_R * (double)(e->sample->samples[e->sample_index]);
+                    double Rval = fA * SHORT_MAX_R * (double)(e->sample->samples[e->sample_index+1]);
+
+                    fbuf[2*i] += Lval;
+                    fbuf[2*i + 1] += Rval;
+
+                    e->t += GLOBAL_DT;
+                    e->sample_index += 2;
+                }
+            }
+            else {
+                for (int i = 0; i < b->mDataByteSize/sizeof(short)/b->mNumberChannels; ++i) {
+                    double val = 0.5 * e->A * 
+                    pcwaveform_sine_limit(e->hz, e->t, 0, modulation);
                     
-                short Lval = fA * e->sample->samples[e->sample_index];
-                short Rval = fA * e->sample->samples[e->sample_index+1];
+                    fbuf[2*i] += val;
+                    fbuf[2*i+1] += val;
 
-                samples[2*i] += Lval;
-                samples[2*i + 1] += Rval;
+                    e->t += GLOBAL_DT;
 
-                e->t += GLOBAL_DT;
-                e->sample_index += 2;
+                }
             }
             e->phase = e->hz * e->t * TWOPI;
+        }
+
+        for (int i = 0; i < b->mDataByteSize/sizeof(short)/b->mNumberChannels; ++i) {
+            samples[2*i] = SHORT_MAX * clamp(fbuf[2*i], -1.0, 1.0);
+            samples[2*i + 1] = SHORT_MAX * clamp(fbuf[2*i + 1], -1.0, 1.0);
         }
 
     }
@@ -418,10 +440,3 @@ int init_output() {
 }
 
 
-//int main(int argc, char* argv[]) {
-//
-//	CFRunLoopRef runLoop;
-//	runLoop = CFRunLoopGetCurrent();
-//	CFRunLoopRun();
-//}
-//
