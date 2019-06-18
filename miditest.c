@@ -58,26 +58,6 @@ void mqueue_delete_at(mqueue_t *q, int i) {
 
 }
 
-void mqueue_update(mqueue_t *q) {
-    for (int i = 0; i < q->num_events; ++i) {
-        mevent_t *e = &q->events[i];
-        if (!e->sample) {
-            if (keys[e->keyindex].pressed) {
-                e->A *= 0.9995;
-            }
-            else {
-                e->A *= 0.99;
-            }
-        }
-        else {
-            if (!keys[e->keyindex].pressed) {
-                e->A *= 0.995;
-            }
-            // else e->A = 1 ?
-        }
-    }
-}
-
 void mqueue_purge(mqueue_t *q) {
     for (int i = 0; i < q->num_events; ++i) {
         if (q->events[i].A < 0.001) {
@@ -387,7 +367,7 @@ void set_keyarray_state(const MIDIPacket *packet) {
 				}
 				else left_pedal_down = 0;
 			}
-            else if (keyindex == MODULATION_WHEEL) {
+            else if (keyindex == VOLUME) { // originally MODULATION_WHEEL
                 modulation = (double)param1 / (double)0x7F;
                 //printf("modulation: %f\n", modulation);
             }
@@ -407,7 +387,7 @@ static void readproc(const MIDIPacketList *pktlist, void *readProcRefCon, void *
 	int i;
 	int count = pktlist->numPackets;
 	for (i=0; i<count; i++) {
-//		printPacketInfo(packet);
+		//printPacketInfo(packet);
 		set_keyarray_state(packet);
 		packet = MIDIPacketNext(packet); // this is quite necessary lol
 	}
@@ -511,9 +491,10 @@ void init_curses() {
     intrflush(stdscr, FALSE); 
     keypad(stdscr, TRUE);
 
-    mvaddstr(0, 0, "--- JOOH JUUH MIDII JA SILLEE ---");
+    mvaddstr(0, 0, "--- JOOH JUUH MIDII JA SILLEE 8) ---");
     mvaddstr(2, 0, "* press P to toggle piano sample sound");
     mvaddstr(3, 0, "* press H to toggle automatic harmony");
+    mvaddstr(4, 0, "* press Q to quit");
 
     refresh();
 
@@ -532,6 +513,12 @@ void *key_loop(void * _Nullable arg) {
             case 'h':
             case 'H':
                 harmony_enabled = !harmony_enabled;
+                break;
+
+            case 'q':
+            case 'Q':
+                endwin();
+                exit(0);
                 break;
 
             default:

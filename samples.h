@@ -1,6 +1,8 @@
 #ifndef SAMPLES_H
 #define SAMPLES_H
 
+#include "output.h" 
+
 enum {
     SAMPLE_TYPE_RAW,
     SAMPLE_TYPE_WAV,
@@ -13,7 +15,7 @@ typedef struct sample_t {
 } sample_t;
 
 typedef struct fsample_t {
-    double *samples;
+    SAMPLETYPE *samples;
     unsigned int num_frames;
     int num_channels;
 } fsample_t;

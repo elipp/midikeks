@@ -6,14 +6,14 @@
 #include <AudioToolbox/AudioToolbox.h>
 
 #include "midi.h"
+#include "output.h"
 #include "input.h"
 
 //typedef OSStatus (*AURenderCallback)(void *inRefCon, AudioUnitRenderActionFlags *ioActionFlags, const AudioTimeStamp *inTimeStamp, UInt32 inBusNumber, UInt32 inNumberFrames, AudioBufferList *ioData);
 
-#define PREFERRED_FRAMESIZE 16
 
-const double SHORT_MAX = 32767.0;
-const double SHORT_MAX_I = 1.0/SHORT_MAX;
+const SAMPLETYPE SHORT_MAX = 32767.0;
+const SAMPLETYPE SHORT_MAX_I = 1.0/SHORT_MAX;
 
 const double eqtemp_12 = 1.0594630943592953;
 double eqtemp_factor = eqtemp_12;
@@ -182,7 +182,7 @@ static int get_current_dumpoffset() {
 	return dumpoffset;
 }
 
-static inline double clamp(double in, double min, double max) {
+static inline SAMPLETYPE clamp(SAMPLETYPE in, SAMPLETYPE min, SAMPLETYPE max) {
     if (in > max) return max;
     if (in < min) return min;
     return in;
@@ -197,8 +197,11 @@ static OSStatus rcallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFl
 //	memset(samples, 0, b->mDataByteSize);
 
 	int num_keys = 0;
-    double fbuf[128*2]; // the buffer is most likely never going to be over 32 samples (because of delay) so this should be fine
+
+    static SAMPLETYPE fbuf[1024*2]; // the buffer is most likely never going to be over 32 samples (because of delay) so this should be fine
     memset(fbuf, 0, sizeof(fbuf));
+
+    static short delaybuf[1024*2];
 
 //	float *input = get_input_data();
 //
@@ -233,10 +236,12 @@ static OSStatus rcallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFl
 //
 //	}
 
+    int NUM_FRAMES = b->mDataByteSize/sizeof(short)/b->mNumberChannels;
+
     if (b->mNumberChannels == 1) {
         for (int m = 0; m < mqueue.num_events; ++m) {
             mevent_t *e = &mqueue.events[m];
-            for (int i = 0; i < b->mDataByteSize/sizeof(short); ++i) {
+            for (int i = 0; i < NUM_FRAMES; ++i) {
                 samples[i] += 0.3 * SHORT_MAX * e->A * 
                    pcwaveform_sine_limit(e->hz, e->t, 0, modulation);
                     //pcwaveform_synthpiano(e->hz, e->t, 0);
@@ -251,22 +256,27 @@ static OSStatus rcallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFl
         for (int m = 0; m < mqueue.num_events; ++m) {
             mevent_t *e = &mqueue.events[m];
             if (e->sample) {
-                for (int i = 0; i < b->mDataByteSize/sizeof(short)/b->mNumberChannels; ++i) {
+                for (int i = 0; i < NUM_FRAMES; ++i) {
                     // e->A for samples has a separate block :)
-                    double fA = 0.33 * e->A; 
-                    double Lval = fA * e->sample->samples[e->sample_index];
-                    double Rval = fA * e->sample->samples[e->sample_index+1];
+                    SAMPLETYPE fA = 0.33 * e->A; 
+
+                    SAMPLETYPE Lval = fA * e->sample->samples[e->sample_index];
+                    SAMPLETYPE Rval = fA * e->sample->samples[e->sample_index+1];
 
                     fbuf[2*i] += Lval;
                     fbuf[2*i + 1] += Rval;
 
                     e->t += GLOBAL_DT;
                     e->sample_index += 2;
+                    if (!keys[e->keyindex].pressed) {
+                        //e->A *= exp(-0.0008*e->t);
+                        e->A *= 0.9995;
+                    }
                 }
             }
             else {
-                for (int i = 0; i < b->mDataByteSize/sizeof(short)/b->mNumberChannels; ++i) {
-                    double val = 0.5 * e->A * 
+                for (int i = 0; i < NUM_FRAMES; ++i) {
+                    SAMPLETYPE val = 0.5 * e->A * 
                     pcwaveform_sine_limit(e->hz, e->t, 0, modulation);
                     
                     fbuf[2*i] += val;
@@ -274,19 +284,27 @@ static OSStatus rcallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFl
 
                     e->t += GLOBAL_DT;
 
+                    if (keys[e->keyindex].pressed) {
+                        e->A *= 0.99998;
+                    }
+                    else  {
+                        e->A *= 0.999;
+                    }
                 }
             }
             e->phase = e->hz * e->t * TWOPI;
         }
 
         for (int i = 0; i < b->mDataByteSize/sizeof(short)/b->mNumberChannels; ++i) {
-            samples[2*i] = SHORT_MAX * clamp(fbuf[2*i], -1.0, 1.0);
-            samples[2*i + 1] = SHORT_MAX * clamp(fbuf[2*i + 1], -1.0, 1.0);
+            samples[2*i] = SHORT_MAX * (clamp(fbuf[2*i], -1.0, 1.0));
+            samples[2*i + 1] = SHORT_MAX * (clamp(fbuf[2*i + 1], -1.0, 1.0));
         }
 
+    //    memcpy(delaybuf, samples, b->mDataByteSize);
+
     }
+
     mqueue_purge(&mqueue);
-    mqueue_update(&mqueue);
 
 #ifdef DUMP
 	if (get_current_dumpoffset() + PREFERRED_FRAMESIZE >= DUMPSAMPLES) stop_dumping();

@@ -52,8 +52,6 @@ void mqueue_add(mqueue_t *q, mevent_t *e);
 void mqueue_purge();
 void mqueue_delete_at(mqueue_t *q, int i);
 
-void mqueue_update();
-
 extern mqueue_t mqueue;
 extern sound_t *sound;
 extern int sustain_pedal_down;

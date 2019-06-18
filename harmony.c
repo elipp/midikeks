@@ -34,8 +34,8 @@ static voicing_t voicings[] = {
     {{ E_maj3, E_1, E_9, E_5, E_1, E_END }},
     {{ E_1, E_maj3, E_6, E_9, E_5, E_END }},
     {{ E_1, E_min7, E_9, E_min3, E_5, E_END }},
-    {{ E_1, E_SKIP, E_9, E_min3, E_5, E_min7, E_END }},
-    {{ E_1, E_SKIP, E_min3, E_5, E_min7, E_9, E_END }},
+    {{ E_1, E_min7, E_9, E_min3, E_5, E_min7, E_END }},
+    {{ E_1, E_5, E_min3, E_5, E_min7, E_9, E_END }},
 
 
     //{{ E_1, E_5, E_min7, E_min3, E_11 , E_END}}, // this one needs to be played pretty low on the kb to sound good

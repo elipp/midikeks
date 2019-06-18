@@ -21,7 +21,7 @@ fsample_t alloc_fsample(size_t num_frames, int num_channels) {
 
     // explanation for the following: the "raw" file format is 16-bit signed short, so num samples is filesize/sizeof(short)
     int num_samples = num_frames * num_channels;
-    s.samples = malloc((num_samples + 16) * sizeof(double));  
+    s.samples = malloc((num_samples + 16) * sizeof(SAMPLETYPE));  
     
     s.num_frames = num_frames;
 
@@ -80,12 +80,12 @@ fsound_t *load_fsound(int sample_type, const char* filename_format, int num_chan
         int num_frames = s->samples[i].num_frames;
         fs->samples[i] = alloc_fsample(num_frames, 2);
 
-        double *D = fs->samples[i].samples;
+        SAMPLETYPE *D = fs->samples[i].samples;
         short *S = s->samples[i].samples;
 
         for (int j = 0; j < num_frames; ++j) {
-            D[2*j] = SHORT_MAX_I * (double)S[2*j];
-            D[2*j + 1] = SHORT_MAX_I * (double)S[2*j + 1];
+            D[2*j] = SHORT_MAX_I * (SAMPLETYPE)S[2*j];
+            D[2*j + 1] = SHORT_MAX_I * (SAMPLETYPE)S[2*j + 1];
         }
     }
 
@@ -95,9 +95,11 @@ fsound_t *load_fsound(int sample_type, const char* filename_format, int num_chan
 }
 
 sample_t *get_sample(sound_t *s, int index) {
-    return &s->samples[index];
+    if (index < 21) return NULL;
+    return &s->samples[index-21];
 }
 
 fsample_t *get_fsample(fsound_t *s, int index) {
-    return &s->samples[index];
+    if (index < 21) return NULL;
+    return &s->samples[index-21];
 }
