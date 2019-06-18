@@ -8,13 +8,13 @@ enum {
 
 typedef struct sample_t {
     short *samples;
-    unsigned int num_samples;
+    unsigned int num_frames;
     int num_channels;
 } sample_t;
 
 typedef struct fsample_t {
     double *samples;
-    unsigned int num_samples;
+    unsigned int num_frames;
     int num_channels;
 } fsample_t;
 
@@ -38,6 +38,5 @@ fsound_t *load_fsound(int sample_type, const char* filename_prefix, int num_chan
 
 sample_t *get_sample(sound_t *s, int index);
 fsample_t *get_fsample(fsound_t *s, int index);
-
 
 #endif

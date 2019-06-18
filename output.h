@@ -10,5 +10,7 @@ extern const double TWOPI;
 extern const double eqtemp_12;
 extern double eqtemp_factor;
 
+extern const double SHORT_MAX;
+extern const double SHORT_MAX_I;
 
 #endif

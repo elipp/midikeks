@@ -33,7 +33,7 @@ typedef struct mevent_t {
     double phase;
     double decay;
     int keyindex;
-    sample_t *sample;
+    fsample_t *sample;
     int sample_index;
     // add sound here too
 } mevent_t;
@@ -45,7 +45,7 @@ typedef struct mqueue_t {
 
 extern MIDIkey_t keys[];
 
-mevent_t mevent_new(int keyindex, double hz, double A, sample_t *sample);
+mevent_t mevent_new(int keyindex, double hz, double A, fsample_t *sample);
 
 void mqueue_init(mqueue_t *q);
 void mqueue_add(mqueue_t *q, mevent_t *e);

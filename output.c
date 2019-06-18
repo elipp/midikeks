@@ -11,8 +11,9 @@
 //typedef OSStatus (*AURenderCallback)(void *inRefCon, AudioUnitRenderActionFlags *ioActionFlags, const AudioTimeStamp *inTimeStamp, UInt32 inBusNumber, UInt32 inNumberFrames, AudioBufferList *ioData);
 
 #define PREFERRED_FRAMESIZE 16
-static const double SHORT_MAX = 32767.0;
-static const double SHORT_MAX_R = 1.0/SHORT_MAX;
+
+const double SHORT_MAX = 32767.0;
+const double SHORT_MAX_I = 1.0/SHORT_MAX;
 
 const double eqtemp_12 = 1.0594630943592953;
 double eqtemp_factor = eqtemp_12;
@@ -253,8 +254,8 @@ static OSStatus rcallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFl
                 for (int i = 0; i < b->mDataByteSize/sizeof(short)/b->mNumberChannels; ++i) {
                     // e->A for samples has a separate block :)
                     double fA = 0.33 * e->A; 
-                    double Lval = fA * SHORT_MAX_R * (double)(e->sample->samples[e->sample_index]);
-                    double Rval = fA * SHORT_MAX_R * (double)(e->sample->samples[e->sample_index+1]);
+                    double Lval = fA * e->sample->samples[e->sample_index];
+                    double Rval = fA * e->sample->samples[e->sample_index+1];
 
                     fbuf[2*i] += Lval;
                     fbuf[2*i + 1] += Rval;

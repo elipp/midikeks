@@ -17,12 +17,14 @@ static void notifyproc(const MIDINotification *message, void *refCon) {
 
 mqueue_t mqueue;
 sound_t *sound = NULL;
+fsound_t *fsound = NULL;
+
 static int sound_enabled = 1;
 static int harmony_enabled = 0;
 
 double modulation = 1.0;
 
-mevent_t mevent_new(int keyindex, double hz, double A, sample_t *sample) {
+mevent_t mevent_new(int keyindex, double hz, double A, fsample_t *sample) {
     mevent_t e; 
     e.keyindex = keyindex;
     e.hz = hz;
@@ -296,7 +298,7 @@ static void key_on2(UInt8 keyindex, UInt8 velocity) {
     A *= A; // exponential? ok
 
     mevent_t e = mevent_new(keyindex, midikey_to_hz(keyindex), A, 
-            sound_enabled ? get_sample(sound, keyindex) : NULL);
+            sound_enabled ? get_fsample(fsound, keyindex) : NULL);
 
     mqueue_add(&mqueue, &e);
 
@@ -311,13 +313,13 @@ static void key_on2(UInt8 keyindex, UInt8 velocity) {
 //    printf("keyindex: %d, highest: %d, bass %d (bass + highest = %d)\n", keyindex, highest, bass, bass + highest);
     
     mevent_t ve = mevent_new(keyindex, midikey_to_hz(bass - 12), 0.8*A, 
-            sound_enabled ? get_sample(sound, bass-12) : NULL);
+            sound_enabled ? get_fsample(fsound, bass-12) : NULL);
  //   mqueue_add(&mqueue, &ve);
 
     i = 0;
     while (v->members[i] != E_END) {
         ve = mevent_new(keyindex, midikey_to_hz(bass + v->pitches[i]), 0.75*A, 
-                sound_enabled ? get_sample(sound, bass + v->pitches[i]) : NULL);
+                sound_enabled ? get_fsample(fsound, bass + v->pitches[i]) : NULL);
         mqueue_add(&mqueue, &ve);
         ++i;
     }
@@ -548,7 +550,8 @@ int main(int argc, char *args[]) {
 	init_eqtemp_hztable();
     init_voicings();
 
-    sound = load_sound(SAMPLE_TYPE_RAW, "samples/16/raws/piano_%d.raw", 2);
+//    sound = load_sound(SAMPLE_TYPE_RAW, "samples/16/raws/piano_%d.raw", 2);
+    fsound = load_fsound(SAMPLE_TYPE_RAW, "samples/16/raws/piano_%d.raw", 2);
 		
     if (!select_MIDI_input()) return 1;
 
