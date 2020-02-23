@@ -256,23 +256,28 @@ static OSStatus rcallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFl
         for (int m = 0; m < mqueue.num_events; ++m) {
             mevent_t *e = &mqueue.events[m];
             if (e->sample) {
-                for (int i = 0; i < NUM_FRAMES; ++i) {
-                    // e->A for samples has a separate block :)
-                    SAMPLETYPE fA = 0.33 * e->A; 
+	    	if (e->sample_index >= e->sample->num_frames - 1) {
+			e->A = 0;
+		}
+		else {
+			for (int i = 0; i < NUM_FRAMES; ++i) {
+				// e->A for samples has a separate block :)
+				SAMPLETYPE fA = 0.33 * e->A; 
 
-                    SAMPLETYPE Lval = fA * e->sample->samples[e->sample_index];
-                    SAMPLETYPE Rval = fA * e->sample->samples[e->sample_index+1];
+				SAMPLETYPE Lval = fA * e->sample->samples[e->sample_index];
+				SAMPLETYPE Rval = fA * e->sample->samples[e->sample_index+1];
 
-                    fbuf[2*i] += Lval;
-                    fbuf[2*i + 1] += Rval;
+				fbuf[2*i] += Lval;
+				fbuf[2*i + 1] += Rval;
 
-                    e->t += GLOBAL_DT;
-                    e->sample_index += 2;
-                    if (!keys[e->keyindex].pressed) {
-                        //e->A *= exp(-0.0008*e->t);
-                        e->A *= 0.9995;
-                    }
-                }
+				e->t += GLOBAL_DT;
+				e->sample_index += 2;
+				if (!keys[e->keyindex].pressed) {
+					//e->A *= exp(-0.0008*e->t);
+					e->A *= 0.9995;
+				}
+			}
+		}
             }
             else {
                 for (int i = 0; i < NUM_FRAMES; ++i) {

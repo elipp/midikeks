@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "samples.h"
 #include "output.h"
 
@@ -42,6 +43,7 @@ sound_t *load_sound(int sample_type, const char* filename_format, int num_channe
     char filename_buffer[256];
     sound_t *s = malloc(sizeof(sound_t));
     s->samples = malloc(89*sizeof(sample_t));
+    memset(s->samples, 0, 89*sizeof(sample_t));
 
     for (int i = 0; i < 89; ++i) {
         sprintf(filename_buffer, filename_format, i);
@@ -83,10 +85,16 @@ fsound_t *load_fsound(int sample_type, const char* filename_format, int num_chan
         SAMPLETYPE *D = fs->samples[i].samples;
         short *S = s->samples[i].samples;
 
-        for (int j = 0; j < num_frames; ++j) {
-            D[2*j] = SHORT_MAX_I * (SAMPLETYPE)S[2*j];
-            D[2*j + 1] = SHORT_MAX_I * (SAMPLETYPE)S[2*j + 1];
-        }
+	if (s->samples[i].samples != NULL) {
+		for (int j = 0; j < num_frames; ++j) {
+			D[2*j] = SHORT_MAX_I * (SAMPLETYPE)S[2*j];
+			D[2*j + 1] = SHORT_MAX_I * (SAMPLETYPE)S[2*j + 1];
+		}
+	}
+	else {
+		printf("(skipping sample %d, was NULL)\n", i);
+	}
+
     }
 
     free_sound(s);

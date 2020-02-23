@@ -1,5 +1,5 @@
 CC=clang
-CFLAGS=-O2 -Wall -g
+CFLAGS=-Wall -g
 LIBS=-framework Foundation -framework CoreMIDI -framework AudioToolbox -lncurses -lpthread
 
 all: miditest

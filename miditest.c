@@ -22,6 +22,8 @@ fsound_t *fsound = NULL;
 static int sound_enabled = 1;
 static int harmony_enabled = 0;
 
+static int KB_INPUT_ENABLED = 0;
+
 double modulation = 1.0;
 
 mevent_t mevent_new(int keyindex, double hz, double A, fsample_t *sample) {
@@ -41,7 +43,7 @@ void mqueue_init(mqueue_t *q) {
 }
 
 void mqueue_add(mqueue_t *q, mevent_t *e) {
-//    printf("adding %f to queue at index %d\n", e->hz, q->num_events);
+    //printf("adding %f to queue at index %d, sample: %p\n", e->hz, q->num_events, e->sample);
     q->events[q->num_events] = *e; 
     ++q->num_events;
 }
@@ -327,8 +329,8 @@ void set_keyarray_state(const MIDIPacket *packet) {
 			velocity = packet->data[2];
 			k = &keys[keyindex];
 
-            key_on(k, velocity);
-            key_on2(keyindex, velocity);
+		    	key_on(k, velocity);
+		    	key_on2(keyindex, velocity);
 
 			break;
 
@@ -495,9 +497,43 @@ void init_curses() {
     mvaddstr(2, 0, "* press P to toggle piano sample sound");
     mvaddstr(3, 0, "* press H to toggle automatic harmony");
     mvaddstr(4, 0, "* press Q to quit");
+    if (KB_INPUT_ENABLED) {
+	mvaddstr(5, 0, "* computer keyboard input enabled (D, G, A)");
+    }
 
     refresh();
 
+}
+
+static void handle_KB_INPUT(int c) {
+
+	#define KB_D 46
+	#define KB_G 51
+	#define KB_A 53
+
+	switch(c) {
+		// TODO: add rest :D
+		case 'd':
+		case 'D':
+			key_on(&keys[KB_D], 0x7F);
+			key_on2(KB_D, 0x7F);
+			break;
+		case 'g':
+		case 'G':
+			key_on(&keys[KB_G], 0x7F);
+			key_on2(KB_G, 0x7F);
+
+			break;
+		case 'a':
+		case 'A':
+			key_on(&keys[KB_A], 0x7F);
+			key_on2(KB_A, 0x7F);
+
+			break;
+
+		default:
+			break;
+	}
 }
 
 void *key_loop(void * _Nullable arg) {
@@ -521,11 +557,29 @@ void *key_loop(void * _Nullable arg) {
                 exit(0);
                 break;
 
+
             default:
+	    	if (KB_INPUT_ENABLED) {
+			handle_KB_INPUT(c);
+		}
                 break;
 
         }
     }
+}
+
+static int ask_confirmation(const char* str) {
+    	puts(str);
+	char ansbuf[16];
+	fgets(ansbuf, 15, stdin);
+	ansbuf[15] = '\0';
+
+	if (strcmp(ansbuf, "y\n") == 0 || strcmp(ansbuf, "Y\n") == 0) {
+		return 1;
+	}
+
+	else return 0;
+
 }
 
 int main(int argc, char *args[]) {
@@ -538,9 +592,19 @@ int main(int argc, char *args[]) {
     init_voicings();
 
 //    sound = load_sound(SAMPLE_TYPE_RAW, "samples/16/raws/piano_%d.raw", 2);
-    fsound = load_fsound(SAMPLE_TYPE_RAW, "samples/16/raws/piano_%d.raw", 2);
+//    fsound = load_fsound(SAMPLE_TYPE_RAW, "samples/16/raws/piano_%d.raw", 2);
+    fsound = load_fsound(SAMPLE_TYPE_RAW, "samples/timpani/timpani_%d.raw", 2);
 		
-    if (!select_MIDI_input()) return 1;
+    if (!select_MIDI_input()) {
+	int ans = ask_confirmation("Couldn't find a MIDI input device. Want to use computer keyboard instead?\n");
+	if (!ans) {
+		return 1;
+	}
+	else {
+		printf("Enabling computer keyboard \"MIDI\" input\n");
+		KB_INPUT_ENABLED = 1;
+	}
+    }
 
 	if (!init_output()) return 1;
 //	if (!init_input()) return 1;
