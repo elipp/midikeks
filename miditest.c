@@ -593,7 +593,7 @@ int main(int argc, char *args[]) {
 
 //    sound = load_sound(SAMPLE_TYPE_RAW, "samples/16/raws/piano_%d.raw", 2);
 //    fsound = load_fsound(SAMPLE_TYPE_RAW, "samples/16/raws/piano_%d.raw", 2);
-    fsound = load_fsound(SAMPLE_TYPE_RAW, "samples/timpani/timpani_%d.raw", 2);
+    fsound = load_fsound(SAMPLE_TYPE_RAW, "/Users/elinanora/midikeks/samples/timpani/timpani_%d.raw", 2);
 		
     if (!select_MIDI_input()) {
 	int ans = ask_confirmation("Couldn't find a MIDI input device. Want to use computer keyboard instead? [y/n]");
