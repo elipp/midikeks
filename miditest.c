@@ -430,7 +430,7 @@ static int select_MIDI_input() {
 	printf("number of MIDI sources: %d\n", ndevices);
  
     if (ndevices < 1) {
-		fprintf(stderr, "no MIDI input devices detected, exiting!\n");
+		fprintf(stderr, "no MIDI input devices detected!\n");
 		return 0;
 	}
     else if (ndevices == 1) {
@@ -596,7 +596,7 @@ int main(int argc, char *args[]) {
     fsound = load_fsound(SAMPLE_TYPE_RAW, "samples/timpani/timpani_%d.raw", 2);
 		
     if (!select_MIDI_input()) {
-	int ans = ask_confirmation("Couldn't find a MIDI input device. Want to use computer keyboard instead?\n");
+	int ans = ask_confirmation("Couldn't find a MIDI input device. Want to use computer keyboard instead? [y/n]");
 	if (!ans) {
 		return 1;
 	}
